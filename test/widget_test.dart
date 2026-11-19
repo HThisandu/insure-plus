@@ -1,30 +1,52 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:insure_plus/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('opens the dashboard and navigates between tabs', (tester) async {
+    await tester.pumpWidget(const InsurePlusApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Insure Plus'), findsOneWidget);
+    expect(find.text('Customer dashboard'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.tap(find.text('Policies'));
+    await tester.pumpAndSettle();
+    expect(find.text('Insurance policies'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your profile'), findsOneWidget);
+
+    await tester.tap(find.text('Dashboard'));
+    await tester.pumpAndSettle();
+    expect(find.text('Customer dashboard'), findsOneWidget);
+  });
+
+  testWidgets('opens motor and medical claims from the Claims tab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const InsurePlusApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Claims'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a claim type'), findsOneWidget);
+
+    await tester.tap(find.text('Motor Claims'));
+    await tester.pumpAndSettle();
+    expect(find.text('Motor claim submission'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a claim type'), findsOneWidget);
+
+    await tester.tap(find.text('Medical Claims'));
+    await tester.pumpAndSettle();
+    expect(find.text('Medical claim submission'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a claim type'), findsOneWidget);
   });
 }
