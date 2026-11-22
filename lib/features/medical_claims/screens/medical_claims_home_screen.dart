@@ -39,7 +39,8 @@ class _MedicalClaimsHomeScreenState extends State<MedicalClaimsHomeScreen> {
       MaterialPageRoute(
         builder: (_) => SubmitMedicalClaimScreen(
           service: widget.service,
-          defaultPolicyId: widget.defaultPolicyId,
+          userId: widget.service.userId,
+          initialPolicyId: widget.defaultPolicyId,
           onScanBillWithOcr: widget.onScanBillWithOcr,
         ),
       ),
@@ -49,7 +50,7 @@ class _MedicalClaimsHomeScreenState extends State<MedicalClaimsHomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Medical claim ${created.claimId} submitted successfully.',
+          'Medical claim ${created.claimId} added to your claims list.',
         ),
         action: SnackBarAction(
           label: 'View',
@@ -242,11 +243,13 @@ class _SummaryCard extends StatelessWidget {
                   color: colors.onPrimaryContainer,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Medical Claims Overview',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colors.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    'Medical Claims Overview',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colors.onPrimaryContainer,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

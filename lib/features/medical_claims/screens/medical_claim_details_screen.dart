@@ -69,15 +69,17 @@ class MedicalClaimDetailsScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              alignment: WrapAlignment.spaceBetween,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    claim.claimId,
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      color: colors.onPrimaryContainer,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                Text(
+                                  claim.claimId,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: colors.onPrimaryContainer,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 MedicalStatusBadge(status: claim.status),

@@ -141,6 +141,7 @@ class MedicalClaimService extends ChangeNotifier {
   }
 
   Future<MedicalClaim?> submitMedicalClaim({
+    String? userId,
     required String policyId,
     required double claimAmount,
     required String description,
@@ -160,9 +161,13 @@ class MedicalClaimService extends ChangeNotifier {
     _safeNotifyListeners();
 
     try {
+      final resolvedUserId =
+          (userId != null && userId.trim().isNotEmpty)
+              ? userId.trim()
+              : this.userId;
       final newClaim = MedicalClaim(
         claimId: '',
-        userId: userId,
+        userId: resolvedUserId,
         policyId: policyId.trim(),
         claimAmount: claimAmount,
         description: description.trim(),

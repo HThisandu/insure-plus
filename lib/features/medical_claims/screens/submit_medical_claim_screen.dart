@@ -3,25 +3,61 @@ import 'package:flutter/material.dart';
 import '../models/medical_claim.dart';
 import '../models/ocr_bill_data.dart';
 import '../services/medical_claim_service.dart';
-import '../widgets/bill_upload_picker.dart';
+import '../widgets/medical_bill_upload_card.dart';
+import '../widgets/medical_status_badge.dart';
 
 typedef OcrBillScannerCallback = Future<OcrBillData?> Function(
   BuildContext context,
 );
 
+class MedicalPolicyOption {
+  const MedicalPolicyOption({
+    required this.policyId,
+    required this.planName,
+    required this.remainingBalanceLkr,
+  });
+
+  final String policyId;
+  final String planName;
+  final double remainingBalanceLkr;
+
+  String get displayLabel =>
+      '$policyId · $planName (Balance ${formatLkr(remainingBalanceLkr)})';
+}
+
 class SubmitMedicalClaimScreen extends StatefulWidget {
   const SubmitMedicalClaimScreen({
     super.key,
     required this.service,
-    this.initialOcrData,
-    this.defaultPolicyId = 'MEDICAL-001',
+    required this.userId,
+    this.initialPolicyId,
+    this.ocrPrefill,
     this.onScanBillWithOcr,
   });
 
   final MedicalClaimService service;
-  final OcrBillData? initialOcrData;
-  final String defaultPolicyId;
+  final String userId;
+  final String? initialPolicyId;
+  final OcrBillData? ocrPrefill;
   final OcrBillScannerCallback? onScanBillWithOcr;
+
+  static const List<MedicalPolicyOption> defaultPolicies = [
+    MedicalPolicyOption(
+      policyId: 'MEDICAL-001',
+      planName: 'Family Health Plus',
+      remainingBalanceLkr: 250000.00,
+    ),
+    MedicalPolicyOption(
+      policyId: 'MEDICAL-002',
+      planName: 'Executive Surgical Cover',
+      remainingBalanceLkr: 500000.00,
+    ),
+    MedicalPolicyOption(
+      policyId: 'MEDICAL-003',
+      planName: 'Outpatient & Lab Care',
+      remainingBalanceLkr: 75000.00,
+    ),
+  ];
 
   @override
   State<SubmitMedicalClaimScreen> createState() =>
@@ -39,7 +75,9 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
 
   final _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _policyIdController;
+  late final List<MedicalPolicyOption> _policyOptions;
+  late String _selectedPolicyId;
+
   late final TextEditingController _patientNameController;
   late final TextEditingController _hospitalNameController;
   late final TextEditingController _billNumberController;
@@ -48,30 +86,64 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
 
   String _patientRelationship = MedicalClaim.relationships.first;
   String _treatmentType = MedicalClaim.treatmentTypes.first;
-  DateTime? _admissionDate;
+  DateTime _admissionDate = DateTime.now();
   DateTime? _dischargeDate;
   DateTime? _billDate;
   String? _localBillFilePath;
   bool _ocrApplied = false;
+  double? _enteredAmount;
+
+  MedicalPolicyOption get _selectedPolicy => _policyOptions.firstWhere(
+    (option) => option.policyId == _selectedPolicyId,
+    orElse: () => _policyOptions.first,
+  );
+
+  bool get _exceedsPolicyBalance =>
+      _enteredAmount != null &&
+      _enteredAmount! > _selectedPolicy.remainingBalanceLkr;
 
   @override
   void initState() {
     super.initState();
-    _policyIdController = TextEditingController(text: widget.defaultPolicyId);
+    _policyOptions = List<MedicalPolicyOption>.from(
+      SubmitMedicalClaimScreen.defaultPolicies,
+    );
+    final requestedPolicy = widget.initialPolicyId?.trim();
+    if (requestedPolicy != null && requestedPolicy.isNotEmpty) {
+      final exists = _policyOptions.any(
+        (option) => option.policyId == requestedPolicy,
+      );
+      if (!exists) {
+        _policyOptions.insert(
+          0,
+          MedicalPolicyOption(
+            policyId: requestedPolicy,
+            planName: 'Active Medical Policy',
+            remainingBalanceLkr: 250000.00,
+          ),
+        );
+      }
+      _selectedPolicyId = requestedPolicy;
+    } else {
+      _selectedPolicyId = _policyOptions.first.policyId;
+    }
+
     _patientNameController = TextEditingController();
     _hospitalNameController = TextEditingController();
     _billNumberController = TextEditingController();
     _claimAmountController = TextEditingController();
     _descriptionController = TextEditingController();
 
-    if (widget.initialOcrData != null) {
-      _applyOcrData(widget.initialOcrData!, notify: false);
+    _claimAmountController.addListener(_onAmountChanged);
+
+    if (widget.ocrPrefill != null) {
+      _applyOcrPrefill(widget.ocrPrefill!, showSnackbar: false);
     }
   }
 
   @override
   void dispose() {
-    _policyIdController.dispose();
+    _claimAmountController.removeListener(_onAmountChanged);
     _patientNameController.dispose();
     _hospitalNameController.dispose();
     _billNumberController.dispose();
@@ -80,7 +152,16 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     super.dispose();
   }
 
-  void _applyOcrData(OcrBillData data, {bool notify = true}) {
+  void _onAmountChanged() {
+    final parsed = double.tryParse(
+      _claimAmountController.text.replaceAll(',', '').trim(),
+    );
+    if (parsed != _enteredAmount) {
+      setState(() => _enteredAmount = parsed);
+    }
+  }
+
+  void _applyOcrPrefill(OcrBillData data, {bool showSnackbar = true}) {
     if (data.hospitalName != null && data.hospitalName!.trim().isNotEmpty) {
       _hospitalNameController.text = data.hospitalName!.trim();
     }
@@ -89,6 +170,7 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     }
     if (data.amount != null && data.amount! > 0) {
       _claimAmountController.text = data.amount!.toStringAsFixed(2);
+      _enteredAmount = data.amount;
     }
     if (data.billDate != null) {
       _billDate = data.billDate;
@@ -98,12 +180,12 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     }
     _ocrApplied = data.hasExtractedFields || data.hasImage;
 
-    if (notify && mounted) {
+    if (showSnackbar && mounted) {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Medical bill details auto-filled from OCR. Please review before submitting.',
+            'Auto-filled from AI Bill OCR — please verify details.',
           ),
         ),
       );
@@ -115,7 +197,7 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     if (scanner == null) return;
     final extracted = await scanner(context);
     if (extracted != null && mounted) {
-      _applyOcrData(extracted);
+      _applyOcrPrefill(extracted);
     }
   }
 
@@ -125,15 +207,15 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     DateTime? firstDate,
   }) async {
     final now = DateTime.now();
-    final initial = current ?? now;
     final earliest = firstDate ?? DateTime(now.year - 2);
-    final clampedInitial = initial.isBefore(earliest)
+    final candidate = current ?? now;
+    final initial = candidate.isBefore(earliest)
         ? earliest
-        : (initial.isAfter(now) ? now : initial);
+        : (candidate.isAfter(now) ? now : candidate);
 
     final selected = await showDatePicker(
       context: context,
-      initialDate: clampedInitial,
+      initialDate: initial,
       firstDate: earliest,
       lastDate: now,
     );
@@ -146,12 +228,12 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) return;
 
-    if (_admissionDate != null &&
-        _dischargeDate != null &&
-        _dischargeDate!.isBefore(_admissionDate!)) {
+    if (_dischargeDate != null && _dischargeDate!.isBefore(_admissionDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Discharge date cannot be earlier than admission date.'),
+          content: Text(
+            'Discharge date cannot be earlier than the admission/visit date.',
+          ),
         ),
       );
       return;
@@ -170,7 +252,8 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     }
 
     final createdClaim = await widget.service.submitMedicalClaim(
-      policyId: _policyIdController.text,
+      userId: widget.userId,
+      policyId: _selectedPolicyId,
       claimAmount: parsedAmount,
       description: _descriptionController.text,
       patientName: _patientNameController.text,
@@ -187,6 +270,13 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
     if (!mounted) return;
 
     if (createdClaim != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Medical claim ${createdClaim.claimId} submitted successfully.',
+          ),
+        ),
+      );
       Navigator.of(context).pop(createdClaim);
     } else {
       final message =
@@ -210,337 +300,420 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
           listenable: widget.service,
           builder: (context, _) {
             final isSubmitting = widget.service.isSubmitting;
-            return Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Form(
-                  key: _formKey,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (_ocrApplied)
-                        Card(
-                          color: colors.secondaryContainer,
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.document_scanner_outlined,
-                              color: colors.onSecondaryContainer,
-                            ),
-                            title: Text(
-                              'Auto-filled from AI Bill OCR',
-                              style: TextStyle(
-                                color: colors.onSecondaryContainer,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Review and edit any extracted fields before submitting your claim.',
-                              style: TextStyle(
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_ocrApplied) ...[
+                          Card(
+                            color: colors.secondaryContainer,
+                            child: ListTile(
+                              leading: Icon(
+                                Icons.auto_awesome_outlined,
                                 color: colors.onSecondaryContainer,
                               ),
-                            ),
-                          ),
-                        ),
-                      if (widget.onScanBillWithOcr != null) ...[
-                        FilledButton.tonalIcon(
-                          onPressed: isSubmitting ? null : _handleScanWithOcr,
-                          icon: const Icon(Icons.document_scanner_outlined),
-                          label: Text(
-                            _ocrApplied
-                                ? 'Rescan medical bill with AI OCR'
-                                : 'Scan medical bill with AI OCR',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      _SectionCard(
-                        title: 'Policy & Patient Information',
-                        icon: Icons.person_outline,
-                        children: [
-                          TextFormField(
-                            controller: _policyIdController,
-                            enabled: !isSubmitting,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Medical Policy ID',
-                              hintText: 'e.g. MEDICAL-001',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) =>
-                                (value == null || value.trim().isEmpty)
-                                ? 'Policy ID is required'
-                                : null,
-                          ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _patientNameController,
-                            enabled: !isSubmitting,
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Patient Full Name',
-                              hintText: 'e.g. Kasun Perera',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) =>
-                                (value == null || value.trim().isEmpty)
-                                ? 'Patient name is required'
-                                : null,
-                          ),
-                          const SizedBox(height: 14),
-                          DropdownButtonFormField<String>(
-                            initialValue: _patientRelationship,
-                            decoration: const InputDecoration(
-                              labelText: 'Relationship to Policyholder',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: [
-                              for (final relationship
-                                  in MedicalClaim.relationships)
-                                DropdownMenuItem(
-                                  value: relationship,
-                                  child: Text(relationship),
+                              title: Text(
+                                'Auto-filled from AI Bill OCR — please verify details',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: colors.onSecondaryContainer,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                            ],
-                            onChanged: isSubmitting
-                                ? null
-                                : (value) {
-                                    if (value != null) {
-                                      setState(
-                                        () => _patientRelationship = value,
-                                      );
-                                    }
-                                  },
+                              ),
+                              subtitle: Text(
+                                'Review hospital, bill number, date, and amount before submitting.',
+                                style: TextStyle(
+                                  color: colors.onSecondaryContainer,
+                                ),
+                              ),
+                            ),
                           ),
+                          const SizedBox(height: 12),
                         ],
-                      ),
-                      const SizedBox(height: 12),
-                      _SectionCard(
-                        title: 'Hospital & Treatment Details',
-                        icon: Icons.local_hospital_outlined,
-                        children: [
-                          TextFormField(
-                            controller: _hospitalNameController,
-                            enabled: !isSubmitting,
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Hospital / Clinic Name',
-                              hintText: 'e.g. Asiri Hospital',
-                              border: OutlineInputBorder(),
+                        _FormSectionCard(
+                          title: 'Medical Policy',
+                          icon: Icons.verified_user_outlined,
+                          children: [
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedPolicyId,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Select Active Medical Policy',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (final option in _policyOptions)
+                                  DropdownMenuItem(
+                                    value: option.policyId,
+                                    child: Text(
+                                      option.displayLabel,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                              onChanged: isSubmitting
+                                  ? null
+                                  : (value) {
+                                      if (value != null) {
+                                        setState(
+                                          () => _selectedPolicyId = value,
+                                        );
+                                      }
+                                    },
+                              validator: (value) =>
+                                  (value == null || value.isEmpty)
+                                  ? 'Please select a medical policy'
+                                  : null,
                             ),
-                            validator: (value) =>
-                                (value == null || value.trim().isEmpty)
-                                ? 'Hospital name is required'
-                                : null,
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: [
-                              for (final hospital in _commonHospitals)
-                                ActionChip(
-                                  label: Text(hospital),
-                                  onPressed: isSubmitting
-                                      ? null
-                                      : () {
-                                          setState(() {
-                                            _hospitalNameController.text =
-                                                hospital;
-                                          });
-                                        },
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.primaryContainer.withValues(
+                                  alpha: 0.45,
                                 ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          DropdownButtonFormField<String>(
-                            initialValue: _treatmentType,
-                            decoration: const InputDecoration(
-                              labelText: 'Treatment Type',
-                              border: OutlineInputBorder(),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.account_balance_wallet_outlined,
+                                    size: 18,
+                                    color: colors.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Available Balance: ${formatLkr(_selectedPolicy.remainingBalanceLkr)}',
+                                      style: theme.textTheme.labelLarge
+                                          ?.copyWith(
+                                            color: colors.primary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            items: [
-                              for (final type in MedicalClaim.treatmentTypes)
-                                DropdownMenuItem(
-                                  value: type,
-                                  child: Text(type),
-                                ),
-                            ],
-                            onChanged: isSubmitting
-                                ? null
-                                : (value) {
-                                    if (value != null) {
-                                      setState(() => _treatmentType = value);
-                                    }
-                                  },
-                          ),
-                          const SizedBox(height: 14),
-                          LayoutBuilder(
-                            builder: (context, constraints) {
-                              final admissionField = _DatePickerField(
-                                label: _treatmentType == 'Inpatient'
-                                    ? 'Admission Date'
-                                    : 'Admission Date (Optional)',
-                                dateText: _admissionDate != null
-                                    ? dates.formatMediumDate(_admissionDate!)
-                                    : null,
-                                enabled: !isSubmitting,
-                                onTap: () => _pickDate(
-                                  current: _admissionDate,
-                                  onSelected: (date) => _admissionDate = date,
-                                ),
-                                onClear: _admissionDate != null
-                                    ? () => setState(() => _admissionDate = null)
-                                    : null,
-                              );
-                              final dischargeField = _DatePickerField(
-                                label: _treatmentType == 'Inpatient'
-                                    ? 'Discharge Date'
-                                    : 'Discharge Date (Optional)',
-                                dateText: _dischargeDate != null
-                                    ? dates.formatMediumDate(_dischargeDate!)
-                                    : null,
-                                enabled: !isSubmitting,
-                                onTap: () => _pickDate(
-                                  current: _dischargeDate,
-                                  firstDate: _admissionDate,
-                                  onSelected: (date) => _dischargeDate = date,
-                                ),
-                                onClear: _dischargeDate != null
-                                    ? () => setState(() => _dischargeDate = null)
-                                    : null,
-                              );
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _FormSectionCard(
+                          title: 'Patient Information',
+                          icon: Icons.person_outline,
+                          children: [
+                            TextFormField(
+                              controller: _patientNameController,
+                              enabled: !isSubmitting,
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Patient Name',
+                                hintText: 'e.g. Kasun Perera',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) =>
+                                  (value == null || value.trim().isEmpty)
+                                  ? 'Patient name is required'
+                                  : null,
+                            ),
+                            const SizedBox(height: 14),
+                            DropdownButtonFormField<String>(
+                              initialValue: _patientRelationship,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Relationship',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (final relationship
+                                    in MedicalClaim.relationships)
+                                  DropdownMenuItem(
+                                    value: relationship,
+                                    child: Text(relationship),
+                                  ),
+                              ],
+                              onChanged: isSubmitting
+                                  ? null
+                                  : (value) {
+                                      if (value != null) {
+                                        setState(
+                                          () => _patientRelationship = value,
+                                        );
+                                      }
+                                    },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _FormSectionCard(
+                          title: 'Hospital & Treatment Information',
+                          icon: Icons.local_hospital_outlined,
+                          children: [
+                            TextFormField(
+                              controller: _hospitalNameController,
+                              enabled: !isSubmitting,
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Hospital Name',
+                                hintText: 'e.g. Asiri Hospital',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) =>
+                                  (value == null || value.trim().isEmpty)
+                                  ? 'Hospital name is required'
+                                  : null,
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                for (final hospital in _commonHospitals)
+                                  ActionChip(
+                                    label: Text(hospital),
+                                    onPressed: isSubmitting
+                                        ? null
+                                        : () => setState(
+                                            () => _hospitalNameController.text =
+                                                hospital,
+                                          ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            DropdownButtonFormField<String>(
+                              initialValue: _treatmentType,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Treatment Type',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (final type in MedicalClaim.treatmentTypes)
+                                  DropdownMenuItem(
+                                    value: type,
+                                    child: Text(type),
+                                  ),
+                              ],
+                              onChanged: isSubmitting
+                                  ? null
+                                  : (value) {
+                                      if (value != null) {
+                                        setState(() => _treatmentType = value);
+                                      }
+                                    },
+                            ),
+                            const SizedBox(height: 14),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final admissionPicker = _DateField(
+                                  label: 'Admission / Visit Date',
+                                  dateText: dates.formatMediumDate(
+                                    _admissionDate,
+                                  ),
+                                  enabled: !isSubmitting,
+                                  onTap: () => _pickDate(
+                                    current: _admissionDate,
+                                    onSelected: (date) {
+                                      _admissionDate = date;
+                                      if (_dischargeDate != null &&
+                                          _dischargeDate!.isBefore(date)) {
+                                        _dischargeDate = null;
+                                      }
+                                    },
+                                  ),
+                                );
+                                final dischargePicker = _DateField(
+                                  label: 'Discharge Date (Optional)',
+                                  dateText: _dischargeDate != null
+                                      ? dates.formatMediumDate(_dischargeDate!)
+                                      : null,
+                                  enabled: !isSubmitting,
+                                  onTap: () => _pickDate(
+                                    current: _dischargeDate ?? _admissionDate,
+                                    firstDate: _admissionDate,
+                                    onSelected: (date) => _dischargeDate = date,
+                                  ),
+                                  onClear: _dischargeDate != null
+                                      ? () => setState(
+                                          () => _dischargeDate = null,
+                                        )
+                                      : null,
+                                );
 
-                              if (constraints.maxWidth >= 460) {
-                                return Row(
+                                if (constraints.maxWidth >= 480) {
+                                  return Row(
+                                    children: [
+                                      Expanded(child: admissionPicker),
+                                      const SizedBox(width: 12),
+                                      Expanded(child: dischargePicker),
+                                    ],
+                                  );
+                                }
+                                return Column(
                                   children: [
-                                    Expanded(child: admissionField),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: dischargeField),
+                                    admissionPicker,
+                                    const SizedBox(height: 12),
+                                    dischargePicker,
                                   ],
                                 );
-                              }
-                              return Column(
-                                children: [
-                                  admissionField,
-                                  const SizedBox(height: 12),
-                                  dischargeField,
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _SectionCard(
-                        title: 'Bill & Claim Information',
-                        icon: Icons.receipt_outlined,
-                        children: [
-                          TextFormField(
-                            controller: _billNumberController,
-                            enabled: !isSubmitting,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Bill / Invoice Number (Optional)',
-                              hintText: 'e.g. ASH-2026-88412',
-                              border: OutlineInputBorder(),
+                              },
                             ),
-                          ),
-                          const SizedBox(height: 14),
-                          _DatePickerField(
-                            label: 'Bill Date (Optional)',
-                            dateText: _billDate != null
-                                ? dates.formatMediumDate(_billDate!)
-                                : null,
-                            enabled: !isSubmitting,
-                            onTap: () => _pickDate(
-                              current: _billDate,
-                              onSelected: (date) => _billDate = date,
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _FormSectionCard(
+                          title: 'Bill Details',
+                          icon: Icons.receipt_outlined,
+                          children: [
+                            TextFormField(
+                              controller: _billNumberController,
+                              enabled: !isSubmitting,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Bill Number (Optional)',
+                                hintText: 'e.g. ASH-2026-88412',
+                                border: OutlineInputBorder(),
+                              ),
                             ),
-                            onClear: _billDate != null
-                                ? () => setState(() => _billDate = null)
-                                : null,
-                          ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _claimAmountController,
-                            enabled: !isSubmitting,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
+                            const SizedBox(height: 14),
+                            _DateField(
+                              label: 'Bill Date (Optional)',
+                              dateText: _billDate != null
+                                  ? dates.formatMediumDate(_billDate!)
+                                  : null,
+                              enabled: !isSubmitting,
+                              onTap: () => _pickDate(
+                                current: _billDate,
+                                onSelected: (date) => _billDate = date,
+                              ),
+                              onClear: _billDate != null
+                                  ? () => setState(() => _billDate = null)
+                                  : null,
                             ),
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Claim Amount',
-                              prefixText: 'LKR ',
-                              hintText: '0.00',
-                              border: OutlineInputBorder(),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _claimAmountController,
+                              enabled: !isSubmitting,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Claim Amount',
+                                prefixText: 'LKR ',
+                                hintText: '0.00',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Claim amount is required';
+                                }
+                                final parsed = double.tryParse(
+                                  value.replaceAll(',', '').trim(),
+                                );
+                                if (parsed == null || parsed <= 0) {
+                                  return 'Enter a valid amount greater than 0';
+                                }
+                                return null;
+                              },
                             ),
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Claim amount is required';
-                              }
-                              final parsed = double.tryParse(
-                                value.replaceAll(',', '').trim(),
-                              );
-                              if (parsed == null || parsed <= 0) {
-                                return 'Enter an amount greater than 0';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _descriptionController,
-                            enabled: !isSubmitting,
-                            maxLines: 3,
-                            textCapitalization: TextCapitalization.sentences,
-                            decoration: const InputDecoration(
-                              labelText: 'Diagnosis / Treatment Description',
-                              hintText:
-                                  'Describe the consultation, procedure, or lab tests covered by this bill.',
-                              border: OutlineInputBorder(),
-                              alignLabelWithHint: true,
-                            ),
-                            validator: (value) =>
-                                (value == null || value.trim().length < 5)
-                                ? 'Please enter a short description (at least 5 characters)'
-                                : null,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      BillUploadPicker(
-                        selectedFilePath: _localBillFilePath,
-                        enabled: !isSubmitting,
-                        onFileSelected: (path) =>
-                            setState(() => _localBillFilePath = path),
-                      ),
-                      const SizedBox(height: 20),
-                      FilledButton.icon(
-                        onPressed: isSubmitting ? null : _submitForm,
-                        icon: isSubmitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                            if (_exceedsPolicyBalance) ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: colors.tertiaryContainer,
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                              )
-                            : const Icon(Icons.send_outlined),
-                        label: Text(
-                          isSubmitting
-                              ? 'Submitting claim...'
-                              : 'Submit Medical Claim',
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      Icons.warning_amber_rounded,
+                                      size: 20,
+                                      color: colors.onTertiaryContainer,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Claim amount exceeds your remaining balance (${formatLkr(_selectedPolicy.remainingBalanceLkr)}) on ${_selectedPolicy.policyId}. Excess costs may require co-payment.',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  colors.onTertiaryContainer,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _descriptionController,
+                              enabled: !isSubmitting,
+                              maxLines: 3,
+                              textCapitalization: TextCapitalization.sentences,
+                              decoration: const InputDecoration(
+                                labelText: 'Description / Notes',
+                                hintText:
+                                    'Summarize diagnosis, consultation, lab tests, or procedures.',
+                                border: OutlineInputBorder(),
+                                alignLabelWithHint: true,
+                              ),
+                              validator: (value) =>
+                                  (value == null || value.trim().length < 5)
+                                  ? 'Please enter at least 5 characters'
+                                  : null,
+                            ),
+                          ],
                         ),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(50),
+                        const SizedBox(height: 12),
+                        MedicalBillUploadCard(
+                          selectedFilePath: _localBillFilePath,
+                          enabled: !isSubmitting,
+                          onFileSelected: (path) =>
+                              setState(() => _localBillFilePath = path),
+                          onScanWithOcr: widget.onScanBillWithOcr != null
+                              ? _handleScanWithOcr
+                              : null,
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          onPressed: isSubmitting ? null : _submitForm,
+                          icon: isSubmitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.send_outlined),
+                          label: Text(
+                            isSubmitting
+                                ? 'Submitting claim...'
+                                : 'Submit Medical Claim',
+                          ),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(50),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -552,8 +725,8 @@ class _SubmitMedicalClaimScreenState extends State<SubmitMedicalClaimScreen> {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
+class _FormSectionCard extends StatelessWidget {
+  const _FormSectionCard({
     required this.title,
     required this.icon,
     required this.children,
@@ -596,8 +769,8 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _DatePickerField extends StatelessWidget {
-  const _DatePickerField({
+class _DateField extends StatelessWidget {
+  const _DateField({
     required this.label,
     required this.dateText,
     required this.enabled,
@@ -613,6 +786,7 @@ class _DatePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(4),
@@ -631,10 +805,10 @@ class _DatePickerField extends StatelessWidget {
         child: Text(
           dateText ?? 'Select date',
           style: dateText == null
-              ? Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ? theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 )
-              : Theme.of(context).textTheme.bodyLarge,
+              : theme.textTheme.bodyLarge,
         ),
       ),
     );
