@@ -12,16 +12,13 @@ class AuthService {
     required String password,
     required String phoneNumber,
   }) async {
-    // 1. Create Firebase Authentication account
     final userCredential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
 
-    // 2. Get Firebase UID
     final uid = userCredential.user!.uid;
 
-    // 3. Create Firestore user document
     await _firestore.collection('users').doc(uid).set({
       'fullName': fullName,
       'email': email,
@@ -29,5 +26,19 @@ class AuthService {
       'role': 'Policyholder',
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<UserCredential> loginUser({
+    required String email,
+    required String password,
+  }) async {
+    return await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+  }
+
+  Future<void> logoutUser() async {
+    await _auth.signOut();
   }
 }
