@@ -46,21 +46,23 @@ class InsurePlusApp extends StatelessWidget {
 
                 debugPrint('Login Successful!');
 
-                // Submit Claim
-                final claimId = await ClaimsService().submitClaim(
-                  policyId: 'TEST_POLICY_001',
-                  claimType: 'Medical',
-                  claimAmount: 25000,
-                  description: 'Hospital treatment',
-                );
+                // Get User Claims
+                final claims = await ClaimsService().getUserClaims();
 
-                debugPrint('Claim Submitted Successfully!');
-                debugPrint('Claim ID: $claimId');
+                debugPrint('Total Claims: ${claims.docs.length}');
+
+                for (var doc in claims.docs) {
+                  debugPrint('Claim ID: ${doc['claimId']}');
+                  debugPrint('Claim Type: ${doc['claimType']}');
+                  debugPrint('Amount: ${doc['claimAmount']}');
+                  debugPrint('Status: ${doc['status']}');
+                }
               } catch (e) {
                 debugPrint('Error: $e');
               }
             },
-            child: const Text('Test Submit Claim'),
+
+            child: const Text('Test Get Claims'),
           ),
         ),
       ),
