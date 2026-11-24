@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Policy {
   final String policyId;
   final String policyName;
@@ -36,18 +38,34 @@ class Policy {
 
   bool get isActive => status == 'Active';
 
+  static DateTime _parseDate(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime(2000);
+    }
+
+    return DateTime(2000);
+  }
+
   factory Policy.fromMap(Map<String, dynamic> map, String id) {
     return Policy(
       policyId: id,
-      policyName: map['policyName'] ?? '',
-      category: map['category'] ?? '',
-      description: map['description'] ?? '',
+      policyName: map['policyName']?.toString() ?? '',
+      category: map['category']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
       premium: (map['premium'] as num?)?.toDouble() ?? 0,
       totalCoverage: (map['totalCoverage'] as num?)?.toDouble() ?? 0,
       usedAmount: (map['usedAmount'] as num?)?.toDouble() ?? 0,
-      status: map['status'] ?? 'Pending',
-      startDate: DateTime.tryParse(map['startDate'] ?? '') ?? DateTime(2000),
-      expiryDate: DateTime.tryParse(map['expiryDate'] ?? '') ?? DateTime(2000),
+      status: map['status']?.toString() ?? 'Pending',
+      startDate: _parseDate(map['startDate']),
+      expiryDate: _parseDate(map['expiryDate']),
       features: List<String>.from(map['features'] ?? []),
     );
   }
@@ -61,8 +79,8 @@ class Policy {
       'totalCoverage': totalCoverage,
       'usedAmount': usedAmount,
       'status': status,
-      'startDate': startDate.toIso8601String(),
-      'expiryDate': expiryDate.toIso8601String(),
+      'startDate': Timestamp.fromDate(startDate),
+      'expiryDate': Timestamp.fromDate(expiryDate),
       'features': features,
     };
   }
