@@ -16,9 +16,10 @@ pluginManagement {
         maven {
             url = uri("https://maven.aliyun.com/repository/google")
             content {
-                includeGroupByRegex("com\\.android\\.tools(\\..*)?")
-                includeGroupByRegex("com\\.android\\.build(\\..*)?")
+                includeGroupByRegex("com\\.android(\\..*)?")
                 includeGroupByRegex("androidx(\\..*)?")
+                includeGroupByRegex("com\\.google\\.android(\\..*)?")
+                includeGroupByRegex("com\\.google\\.firebase(\\..*)?")
                 includeGroup("com.google.testing.platform")
             }
         }

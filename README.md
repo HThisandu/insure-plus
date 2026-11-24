@@ -14,10 +14,12 @@ Member 04 — Motor Claims Developer
 ## Current setup status
 
 - This repository's previous setup notes record that the first migration created `public.claims`, the follow-up migration was run against the existing private `claim-documents` bucket, and an extra empty `motor-claim-documents` bucket was removed. Preserve the original object(s) in `claim-documents`.
-- A read-only request to the Supabase REST endpoint for `public.claims` returned HTTP 200 during the latest verification. No claim records were returned for the publishable-key request context; no demo records were inserted.
-- The Storage bucket administration endpoints returned an empty list / `NoSuchBucket` response when accessed with the publishable key. That key cannot independently verify private bucket administration state. The Flutter code uses only the existing `claim-documents` bucket; no bucket was created by this session.
-- Firebase Third-Party Auth and Firebase Anonymous sign-in were recorded as configured in the previous setup notes, but were not independently verified in this session.
-- The updated Dart UI passes all 11 Flutter tests. Static analysis completes with info-only Flutter deprecation/style notices. The latest post-UI Android APK build is still pending; the previously built APK predates these UI changes and must not be treated as the final build.
+- A read-only request to the live Supabase REST endpoint for `public.claims` returned HTTP 200. No demo claim records were inserted; the app shows the intended empty state when a user has no claims.
+- The Storage bucket administration endpoint could not independently verify the private bucket using the publishable key. The Flutter code uses only the existing private `claim-documents` bucket; no bucket was created by this session.
+- Firebase Third-Party Auth and Firebase Anonymous sign-in were recorded as configured in the previous setup notes, but their Firebase/Supabase dashboard settings were not independently re-checked in this session.
+- The updated Dart UI passes all 11 Flutter tests. `flutter analyze --no-pub --no-fatal-infos` reports no errors; info-only Flutter deprecation/style notices remain.
+- A fresh debug APK was built with `--target-platform android-x64 --dart-define-from-file=supabase_config.json`, installed, and launched successfully on the Android 17 x86_64 emulator. The InsureCare home screen and Motor Claim submission form were inspected; no runtime crash or layout overflow appeared in the final log/screenshot checks.
+- Local build compatibility note: this device's cached `jni 1.2.1` Android Gradle script needed its `ndkVersion` set to the installed `28.2.13676358`. That edit is in the local Pub cache only and is not committed in this repository. A clean development machine should verify its NDK/Gradle setup when building.
 
 ## 1. Configure Supabase
 

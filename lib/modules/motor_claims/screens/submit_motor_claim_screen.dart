@@ -582,12 +582,16 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _vehicleType,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Vehicle Type',
                         ),
                         items: _vehicleTypes
                             .map(
-                              (t) => DropdownMenuItem(value: t, child: Text(t)),
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(t, overflow: TextOverflow.ellipsis),
+                              ),
                             )
                             .toList(),
                         onChanged: (val) {
@@ -665,12 +669,16 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _damageSeverity,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Damage Severity',
                         ),
                         items: _severities
                             .map(
-                              (s) => DropdownMenuItem(value: s, child: Text(s)),
+                              (s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(s, overflow: TextOverflow.ellipsis),
+                              ),
                             )
                             .toList(),
                         onChanged: (val) {
