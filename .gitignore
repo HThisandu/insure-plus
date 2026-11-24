@@ -122,3 +122,16 @@ app.*.symbols
 # IDE files
 .idea/
 *.iml
+
+# Node.js dependencies
+backend/functions/node_modules/
+
+# Firebase service account credentials
+**/serviceAccount*.json
+**/*firebase-adminsdk*.json
+
+# Environment and private key files
+.env
+.env.*
+*.pem
+*.key

@@ -1,0 +1,110 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // USERS COLLECTION
+    match /users/{userId} {
+
+      // User can create their own profile
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll([
+          'fullName',
+          'email',
+          'phoneNumber',
+          'role',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'fullName',
+          'email',
+          'phoneNumber',
+          'role',
+          'createdAt'
+        ])
+        && request.resource.data.role == 'Policyholder';
+
+      // User can read only their own profile
+      allow read: if request.auth != null
+        && request.auth.uid == userId;
+
+      // User cannot change their role
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['fullName', 'phoneNumber']);
+
+      // Users cannot delete profiles
+      allow delete: if false;
+    }
+
+
+    // CLAIMS COLLECTION
+    match /claims/{claimId} {
+
+      // User can submit their own claim
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.claimId == claimId
+        && request.resource.data.status == 'Submitted'
+        && request.resource.data.keys().hasAll([
+          'claimId',
+          'userId',
+          'policyId',
+          'claimType',
+          'claimAmount',
+          'description',
+          'status',
+          'documents',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'claimId',
+          'userId',
+          'policyId',
+          'claimType',
+          'claimAmount',
+          'description',
+          'status',
+          'documents',
+          'createdAt'
+        ])
+        && request.resource.data.claimAmount is number
+        && request.resource.data.claimAmount > 0;
+
+      // User can read own claims.
+      // Admin and Operations Staff can read all claims.
+      allow read: if request.auth != null
+        && (
+          resource.data.userId == request.auth.uid
+          || request.auth.token.role in ['Admin', 'OperationsStaff']
+        );
+
+      // Only Admin and Operations Staff can update claim status
+      allow update: if request.auth != null
+        && request.auth.token.role in ['Admin', 'OperationsStaff']
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in [
+          'Submitted',
+          'UnderReview',
+          'MoreInfoRequired',
+          'Approved',
+          'Rejected'
+        ];
+
+      // Claims cannot be deleted
+      allow delete: if false;
+    }
+
+
+    // DENY ACCESS TO ALL OTHER COLLECTIONS
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

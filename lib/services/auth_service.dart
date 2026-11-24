@@ -1,4 +1,3 @@
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -12,20 +11,30 @@ class AuthService {
     required String password,
     required String phoneNumber,
   }) async {
-    final userCredential = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    UserCredential? userCredential;
 
-    final uid = userCredential.user!.uid;
+    try {
+      userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-    await _firestore.collection('users').doc(uid).set({
-      'fullName': fullName,
-      'email': email,
-      'phoneNumber': phoneNumber,
-      'role': 'Policyholder',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+      final user = userCredential.user!;
+
+      await _firestore.collection('users').doc(user.uid).set({
+        'fullName': fullName,
+        'email': email,
+        'phoneNumber': phoneNumber,
+        'role': 'Policyholder',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      if (userCredential?.user != null) {
+        await userCredential!.user!.delete();
+      }
+
+      rethrow;
+    }
   }
 
   Future<UserCredential> loginUser({
