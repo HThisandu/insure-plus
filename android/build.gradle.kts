@@ -1,5 +1,14 @@
 allprojects {
     repositories {
+        maven {
+            url = uri("https://maven.aliyun.com/repository/google")
+            content {
+                includeGroupByRegex("com\\.android\\.tools(\\..*)?")
+                includeGroupByRegex("com\\.android\\.build(\\..*)?")
+                includeGroupByRegex("androidx(\\..*)?")
+                includeGroup("com.google.testing.platform")
+            }
+        }
         google()
         mavenCentral()
     }

@@ -206,7 +206,7 @@ class MotorClaim extends Claim {
     ];
   }
 
-  /// Converts the Motor Claim into a Map for Firestore persistence.
+  /// Converts the Motor Claim into a Map for backend persistence.
   @override
   Map<String, dynamic> toMap() {
     final map = super.toMap();
@@ -218,7 +218,7 @@ class MotorClaim extends Claim {
       'vehicleModel': vehicleModel,
       'vehicleYear': vehicleYear,
       'vehicleType': vehicleType,
-      'incidentDate': incidentDate.toIso8601String(),
+      'incidentDate': incidentDate,
       'incidentTime': incidentTime,
       'incidentLocation': incidentLocation,
       'incidentType': incidentType,
@@ -294,11 +294,7 @@ class MotorClaim extends Claim {
       description: map['description'] as String? ?? '',
       status: ClaimStatus.fromString(map['status'] as String? ?? 'Submitted'),
       documents: docs,
-      createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
-          : (map['submissionDate'] != null
-              ? DateTime.tryParse(map['submissionDate'].toString()) ?? DateTime.now()
-              : DateTime.now()),
+      createdAt: _readMotorClaimDateTime(map['createdAt'] ?? map['submissionDate']),
       claimantName: map['claimantName'] as String? ?? 'Insured Customer',
       contactNumber: map['contactNumber'] as String? ?? '',
       vehicleRegistrationNumber: map['vehicleRegistrationNumber'] as String? ?? '',
@@ -306,9 +302,7 @@ class MotorClaim extends Claim {
       vehicleModel: map['vehicleModel'] as String? ?? '',
       vehicleYear: (map['vehicleYear'] as num?)?.toInt() ?? 2022,
       vehicleType: map['vehicleType'] as String? ?? 'Car',
-      incidentDate: map['incidentDate'] != null
-          ? DateTime.tryParse(map['incidentDate'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      incidentDate: _readMotorClaimDateTime(map['incidentDate']),
       incidentTime: map['incidentTime'] as String? ?? '12:00 PM',
       incidentLocation: map['incidentLocation'] as String? ?? '',
       incidentType: map['incidentType'] as String? ?? 'Collision',
@@ -403,4 +397,9 @@ class MotorClaim extends Claim {
       approvedAmount: approvedAmount ?? this.approvedAmount,
     );
   }
+}
+
+DateTime _readMotorClaimDateTime(dynamic value) {
+  if (value is DateTime) return value;
+  return DateTime.tryParse(value?.toString() ?? '') ?? DateTime.now();
 }

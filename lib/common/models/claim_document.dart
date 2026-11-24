@@ -1,10 +1,11 @@
+
 /// Represents a supporting document or photo attached to an insurance claim in Insure-Plus.
 ///
 /// Contains the exact required fields:
 /// - [documentId]: Unique identifier for the document
 /// - [documentType]: Type of document (e.g. 'AccidentPhoto', 'PoliceReport', 'DrivingLicense', 'RepairEstimate')
 /// - [fileName]: Original name of the file
-/// - [fileUrl]: Storage URL or local file path
+/// - [fileUrl]: Private Supabase Storage object path
 /// - [uploadedAt]: Timestamp of upload
 class ClaimDocument {
   final String documentId;
@@ -28,7 +29,7 @@ class ClaimDocument {
       'documentType': documentType,
       'fileName': fileName,
       'fileUrl': fileUrl,
-      'uploadedAt': uploadedAt.toIso8601String(),
+      'uploadedAt': uploadedAt,
     };
   }
 
@@ -39,9 +40,7 @@ class ClaimDocument {
       documentType: map['documentType'] as String? ?? 'General',
       fileName: map['fileName'] as String? ?? '',
       fileUrl: map['fileUrl'] as String? ?? '',
-      uploadedAt: map['uploadedAt'] != null
-          ? DateTime.tryParse(map['uploadedAt'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      uploadedAt: _readUploadedAt(map['uploadedAt']),
     );
   }
 
@@ -61,4 +60,9 @@ class ClaimDocument {
       uploadedAt: uploadedAt ?? this.uploadedAt,
     );
   }
+}
+
+DateTime _readUploadedAt(dynamic value) {
+  if (value is DateTime) return value;
+  return DateTime.tryParse(value?.toString() ?? '') ?? DateTime.now();
 }

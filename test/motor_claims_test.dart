@@ -44,7 +44,7 @@ void main() {
       expect(map['documentType'], 'AccidentPhoto');
       expect(map['fileName'], 'front_damage.jpg');
       expect(map['fileUrl'], 'gs://insure-plus.appspot.com/claims/front_damage.jpg');
-      expect(map['uploadedAt'], now.toIso8601String());
+      expect(map['uploadedAt'], now);
 
       final fromMap = ClaimDocument.fromMap(map);
       expect(fromMap.documentId, doc.documentId);
@@ -134,7 +134,7 @@ void main() {
     });
   });
 
-  group('Motor Claims - Service and Firebase Integration Tests', () {
+  group('Motor Claims - Service State Tests', () {
     late MotorClaimService service;
 
     setUp(() {
@@ -142,81 +142,24 @@ void main() {
       service.resetToDefaultData();
     });
 
-    test('Service initializes with 5 preloaded sample claims with exact statuses', () {
-      expect(service.claims.length, 5);
-      expect(service.claims.any((c) => c.status == ClaimStatus.submitted), true);
-      expect(service.claims.any((c) => c.status == ClaimStatus.underReview), true);
-      expect(service.claims.any((c) => c.status == ClaimStatus.moreInfoRequired), true);
-      expect(service.claims.any((c) => c.status == ClaimStatus.approved), true);
-      expect(service.claims.any((c) => c.status == ClaimStatus.rejected), true);
+    test("Does not inject fabricated sample claims into a real user's list", () {
+      expect(service.claims, isEmpty);
     });
 
-    test('getClaimById finds claim and returns correct vehicle', () {
-      final claim = service.getClaimById('CLM-MOT-2026-001');
-      expect(claim, isNotNull);
-      expect(claim!.vehicleMake, 'Toyota');
-      expect(claim.userId, 'USR-78401');
-      expect(claim.documents.isNotEmpty, true);
-    });
-
-    test('addClaim stores claim and generates next ID', () {
-      final nextId = service.generateNextClaimId();
-      final newClaim = MotorClaim(
-        claimId: nextId,
-        userId: 'USR-NEW',
-        policyId: 'POL-NEW',
-        claimAmount: 500.0,
-        description: 'Scratch on passenger door.',
-        claimantName: 'New User',
-        contactNumber: '+1 555-9999',
-        vehicleRegistrationNumber: 'WP-NEW-01',
-        vehicleMake: 'Nissan',
-        vehicleModel: 'March',
-        vehicleYear: 2020,
-        incidentDate: DateTime.now(),
-        incidentTime: '14:00 PM',
-        incidentLocation: 'Parking Lot',
-        incidentType: 'Single Vehicle Accident',
-        driverName: 'New User',
-        driverLicenseNumber: 'D443322',
-        documents: [
-          ClaimDocument(
-            documentId: 'PHOTO-NEW',
-            documentType: 'AccidentPhoto',
-            fileName: 'Door_Scratch.jpg',
-            fileUrl: 'gs://insure-plus.appspot.com/motor_claims/photos/Door_Scratch.jpg',
-          ),
-        ],
-      );
-
-      service.addClaim(newClaim);
-      expect(service.claims.first.claimId, nextId);
-      expect(service.getClaimById(nextId), isNotNull);
-    });
-
-    test('updateClaimStatus updates state and handles assessor notes', () {
-      service.updateClaimStatus(
-        'CLM-MOT-2026-003',
-        ClaimStatus.approved,
-        notes: 'Damage inspection passed.',
-        approvedAmount: 420.00,
-      );
-
-      final claim = service.getClaimById('CLM-MOT-2026-003')!;
-      expect(claim.status, ClaimStatus.approved);
-      expect(claim.approvedAmount, 420.00);
-      expect(claim.notes, 'Damage inspection passed.');
-    });
-
-    test('getStatistics accurately counts allowed statuses', () {
+    test('Statistics include only the five agreed statuses', () {
       final stats = service.getStatistics();
-      expect(stats['total'], service.claims.length);
-      expect(stats.containsKey('submitted'), true);
-      expect(stats.containsKey('underReview'), true);
-      expect(stats.containsKey('moreInfoRequired'), true);
-      expect(stats.containsKey('approved'), true);
-      expect(stats.containsKey('rejected'), true);
+      expect(stats['total'], 0);
+      expect(stats['submitted'], 0);
+      expect(stats['underReview'], 0);
+      expect(stats['moreInfoRequired'], 0);
+      expect(stats['approved'], 0);
+      expect(stats['rejected'], 0);
       expect(stats.containsKey('settled'), false);
+    });
+
+    test('Filtering an empty claims list returns no results', () {
+      expect(service.getFilteredClaims(), isEmpty);
+      expect(service.getFilteredClaims(status: ClaimStatus.approved), isEmpty);
     });
   });
 
@@ -322,18 +265,15 @@ void main() {
       expect(find.text('\$900.00'), findsOneWidget);
     });
 
-    testWidgets('MotorClaimsDashboardScreen loads with portal header and actions', (WidgetTester tester) async {
+    testWidgets('MotorClaimsDashboardScreen shows a retry message when Supabase is unavailable', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: MotorClaimsDashboardScreen(),
         ),
       );
 
-      expect(find.text('Motor Claims Portal'), findsOneWidget);
-      expect(find.text('Claims Overview'), findsOneWidget);
-      expect(find.text('File New Claim'), findsOneWidget);
-      expect(find.text('Track Status'), findsOneWidget);
-      expect(find.text('Member 04 • Motor Claims'), findsOneWidget);
+      expect(find.text('Could not load claims from Supabase.'), findsOneWidget);
+      expect(find.text('Try Again'), findsOneWidget);
     });
   });
 }

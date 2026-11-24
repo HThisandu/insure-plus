@@ -52,7 +52,7 @@ class Claim {
     return '\$${claimAmount.toStringAsFixed(2)}';
   }
 
-  /// Converts the shared claim fields to a Map for Firestore persistence.
+  /// Converts the shared claim fields to a Map for backend persistence.
   Map<String, dynamic> toMap() {
     return {
       'claimId': claimId,
@@ -63,7 +63,7 @@ class Claim {
       'description': description,
       'status': status.value,
       'documents': documents.map((doc) => doc.toMap()).toList(),
-      'createdAt': createdAt.toIso8601String(),
+      'createdAt': createdAt,
     };
   }
 
@@ -102,9 +102,12 @@ class Claim {
               })
               .toList() ??
           [],
-      createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: _readDateTime(map['createdAt']),
     );
   }
+}
+
+DateTime _readDateTime(dynamic value) {
+  if (value is DateTime) return value;
+  return DateTime.tryParse(value?.toString() ?? '') ?? DateTime.now();
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../common/models/claim_document.dart';
 
 /// Reusable widget for capturing, uploading, and displaying accident photos.
@@ -9,6 +10,7 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
   final ValueChanged<String>? onAddPhoto;
   final ValueChanged<ClaimDocument>? onRemovePhoto;
   final bool isReadOnly;
+  final Future<String> Function(ClaimDocument photo)? resolvePhotoUrl;
 
   const AccidentPhotoUploadWidget({
     super.key,
@@ -16,6 +18,7 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
     this.onAddPhoto,
     this.onRemovePhoto,
     this.isReadOnly = false,
+    this.resolvePhotoUrl,
   });
 
   void _showAddPhotoDialog(BuildContext context) {
@@ -65,22 +68,34 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
                 separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final preset = photoPresets[index];
-                  final isAlreadyAdded = photos.any((p) => p.fileName == preset);
+                  final isAlreadyAdded = photos.any(
+                    (p) => p.fileName == preset,
+                  );
 
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
                       backgroundColor: Colors.indigo.shade50,
-                      child: const Icon(Icons.photo_camera_rounded, color: Colors.indigo, size: 20),
+                      child: const Icon(
+                        Icons.photo_camera_rounded,
+                        color: Colors.indigo,
+                        size: 20,
+                      ),
                     ),
                     title: Text(
                       preset.replaceAll('_', ' ').replaceAll('.jpg', ''),
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     trailing: isAlreadyAdded
                         ? const Icon(Icons.check_circle, color: Colors.green)
                         : TextButton.icon(
-                            icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+                            icon: const Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 16,
+                            ),
                             label: const Text('Add'),
                             onPressed: () {
                               Navigator.pop(ctx);
@@ -109,7 +124,10 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
           children: [
             Text(
               'Accident Photos (${photos.length})',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14.5,
+              ),
             ),
             if (!isReadOnly)
               TextButton.icon(
@@ -129,11 +147,18 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+              border: Border.all(
+                color: Colors.grey.shade300,
+                style: BorderStyle.solid,
+              ),
             ),
             child: Column(
               children: [
-                Icon(Icons.add_photo_alternate_outlined, size: 40, color: Colors.grey.shade400),
+                Icon(
+                  Icons.add_photo_alternate_outlined,
+                  size: 40,
+                  color: Colors.grey.shade400,
+                ),
                 const SizedBox(height: 8),
                 const Text(
                   'No accident photos uploaded yet.',
@@ -181,12 +206,19 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.indigo.shade50,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.indigo.shade200, width: 1.2),
+                      border: Border.all(
+                        color: Colors.indigo.shade200,
+                        width: 1.2,
+                      ),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: const [
-                        Icon(Icons.add_a_photo_outlined, color: Colors.indigo, size: 28),
+                        Icon(
+                          Icons.add_a_photo_outlined,
+                          color: Colors.indigo,
+                          size: 28,
+                        ),
                         SizedBox(height: 6),
                         Text(
                           'Add Photo',
@@ -203,7 +235,9 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
               }
 
               final photoDoc = photos[index];
-              final displayName = photoDoc.fileName.replaceAll('_', ' ').replaceAll('.jpg', '');
+              final displayName = photoDoc.fileName
+                  .replaceAll('_', ' ')
+                  .replaceAll('.jpg', '');
 
               return Stack(
                 children: [
@@ -217,8 +251,46 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.directions_car_filled_rounded, color: Colors.indigo, size: 30),
-                        const SizedBox(height: 6),
+                        Expanded(
+                          child:
+                              resolvePhotoUrl != null &&
+                                  !photoDoc.fileUrl.startsWith('gs://')
+                              ? FutureBuilder<String>(
+                                  future: resolvePhotoUrl!(photoDoc),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasData) {
+                                      return ClipRRect(
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(9),
+                                            ),
+                                        child: Image.network(
+                                          snapshot.data!,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, _, _) => const Icon(
+                                            Icons.broken_image_outlined,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return const Center(
+                                      child: Icon(
+                                        Icons.directions_car_filled_rounded,
+                                        color: Colors.indigo,
+                                        size: 30,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : const Center(
+                                  child: Icon(
+                                    Icons.directions_car_filled_rounded,
+                                    color: Colors.indigo,
+                                    size: 30,
+                                  ),
+                                ),
+                        ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: Text(
@@ -235,7 +307,10 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
                         ),
                         Text(
                           photoDoc.documentId,
-                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ],
                     ),
@@ -244,7 +319,10 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
                     top: 6,
                     left: 6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(4),
@@ -252,9 +330,19 @@ class AccidentPhotoUploadWidget extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.cloud_done_rounded, color: Colors.white, size: 10),
+                          Icon(
+                            Icons.cloud_done_rounded,
+                            color: Colors.white,
+                            size: 10,
+                          ),
                           SizedBox(width: 3),
-                          Text('Firebase', style: TextStyle(color: Colors.white, fontSize: 9.5)),
+                          Text(
+                            'Private Cloud',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9.5,
+                            ),
+                          ),
                         ],
                       ),
                     ),

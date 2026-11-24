@@ -1,10 +1,13 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+
 import '../../../common/models/claim_document.dart';
 import '../../../common/models/claim_status.dart';
 import '../models/motor_claim.dart';
+import '../services/firebase_auth_service.dart';
 import '../services/motor_claim_service.dart';
-import '../widgets/accident_photo_upload_widget.dart';
-import '../widgets/document_picker_tile.dart';
+import '../services/motor_claim_storage_service.dart';
+import '../../../common/theme/insurecare_theme.dart';
 import 'motor_claim_details_screen.dart';
 
 /// Screen allowing users to file/submit a comprehensive new motor insurance claim.
@@ -22,7 +25,7 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Shared Core Claim Fields
-  final _userIdController = TextEditingController(text: 'USR-78401');
+  final _userIdController = TextEditingController();
   final _policyIdController = TextEditingController(text: 'POL-MOT-');
   final _claimantNameController = TextEditingController();
   final _contactNumberController = TextEditingController();
@@ -60,33 +63,20 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
   final _claimAmountController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  // Documents adhering to ClaimDocument schema
-  final List<ClaimDocument> _accidentPhotoDocs = [
-    ClaimDocument(
-      documentId: 'PHOTO-001',
-      documentType: 'AccidentPhoto',
-      fileName: 'Front_Bumper_Damage.jpg',
-      fileUrl: 'gs://insure-plus.appspot.com/motor_claims/photos/Front_Bumper_Damage.jpg',
-    ),
-    ClaimDocument(
-      documentId: 'PHOTO-002',
-      documentType: 'AccidentPhoto',
-      fileName: 'Accident_Scene_Wide.jpg',
-      fileUrl: 'gs://insure-plus.appspot.com/motor_claims/photos/Accident_Scene_Wide.jpg',
-    ),
-  ];
-
-  final Map<String, bool> _supportingDocuments = {
-    'Driver License Copy': true,
-    'Police Accident Report': false,
-    'Repair Garage Quotation': false,
-    'Vehicle Revenue License': true,
-  };
+  // Actual files selected by the user. File bytes are uploaded to Storage.
+  final List<PlatformFile> _selectedAccidentPhotos = [];
+  final List<PlatformFile> _selectedSupportingFiles = [];
 
   bool _agreedToTerms = false;
   bool _isSubmitting = false;
 
-  final List<String> _vehicleTypes = ['Car', 'SUV', 'Motorcycle', 'Van', 'Commercial / Truck'];
+  final List<String> _vehicleTypes = [
+    'Car',
+    'SUV',
+    'Motorcycle',
+    'Van',
+    'Commercial / Truck',
+  ];
   final List<String> _incidentTypes = [
     'Collision',
     'Single Vehicle Accident',
@@ -97,7 +87,13 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
     'Vandalism',
   ];
   final List<String> _severities = ['Minor', 'Moderate', 'Severe'];
-  final List<String> _relationships = ['Self', 'Spouse', 'Son / Daughter', 'Employee', 'Authorized Driver'];
+  final List<String> _relationships = [
+    'Self',
+    'Spouse',
+    'Son / Daughter',
+    'Employee',
+    'Authorized Driver',
+  ];
 
   @override
   void dispose() {
@@ -147,27 +143,72 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
     }
   }
 
-  void _handleSubmit() async {
+  // Select one file per tap; tap again to add more files.
+  Future<void> _pickAccidentPhotos() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+    );
+    if (!mounted || file == null) return;
+    final size = await file.length();
+    if (!mounted) return;
+    if (size == null || size > 10 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Each photo must be 10 MB or smaller.')),
+      );
+      return;
+    }
+    setState(() {
+      if (!_selectedAccidentPhotos.any((item) => item.name == file.name)) {
+        _selectedAccidentPhotos.add(file);
+      }
+    });
+  }
+
+  Future<void> _pickSupportingDocuments() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+    );
+    if (!mounted || file == null) return;
+    final size = await file.length();
+    if (!mounted) return;
+    if (size == null || size > 10 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Each document must be 10 MB or smaller.'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      if (!_selectedSupportingFiles.any((item) => item.name == file.name)) {
+        _selectedSupportingFiles.add(file);
+      }
+    });
+  }
+
+  Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please correct the errors in the form before submitting.'),
+          content: Text(
+            'Please correct the errors in the form before submitting.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
-
-    if (_accidentPhotoDocs.isEmpty) {
+    if (_selectedAccidentPhotos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please upload at least 1 accident damage photo.'),
+          content: Text('Please select at least one accident photo.'),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
-
     if (!_agreedToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -178,185 +219,150 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
       return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-    });
+    final incidentTimeText = _incidentTime.format(context);
+    setState(() => _isSubmitting = true);
+    try {
+      final user = await FirebaseAuthService.instance.ensureSignedIn();
+      _userIdController.text = user.uid;
+      final claimService = MotorClaimService();
+      final newClaimId = claimService.generateNextClaimId();
+      final storageService = MotorClaimStorageService.instance;
+      final uploadedDocuments = <ClaimDocument>[];
 
-    final claimService = MotorClaimService();
-    final newClaimId = claimService.generateNextClaimId();
-
-    final timeString =
-        '${_incidentTime.hour.toString().padLeft(2, '0')}:${_incidentTime.minute.toString().padLeft(2, '0')}';
-
-    // Compile all documents conforming to ClaimDocument schema
-    final List<ClaimDocument> allDocuments = List.from(_accidentPhotoDocs);
-
-    _supportingDocuments.forEach((docTitle, isAttached) {
-      if (isAttached) {
-        final cleanName = docTitle.replaceAll(' ', '_');
-        final docType = docTitle.contains('Police')
-            ? 'PoliceReport'
-            : (docTitle.contains('License') ? 'DrivingLicense' : 'SupportingDocument');
-
-        allDocuments.add(
-          ClaimDocument(
-            documentId: 'DOC-SUPP-${cleanName.hashCode.abs()}',
-            documentType: docType,
-            fileName: '$cleanName.pdf',
-            fileUrl: 'gs://insure-plus.appspot.com/motor_claims/documents/$cleanName.pdf',
-            uploadedAt: DateTime.now(),
+      for (final photo in _selectedAccidentPhotos) {
+        uploadedDocuments.add(
+          await storageService.uploadClaimFile(
+            userId: user.uid,
+            claimId: newClaimId,
+            file: photo,
+            documentType: 'AccidentPhoto',
           ),
         );
       }
-    });
+      for (final document in _selectedSupportingFiles) {
+        uploadedDocuments.add(
+          await storageService.uploadClaimFile(
+            userId: user.uid,
+            claimId: newClaimId,
+            file: document,
+            documentType: 'SupportingDocument',
+          ),
+        );
+      }
 
-    final newClaim = MotorClaim(
-      claimId: newClaimId,
-      userId: _userIdController.text.trim(),
-      policyId: _policyIdController.text.trim(),
-      claimType: 'Motor Claim',
-      claimAmount: double.tryParse(_claimAmountController.text.trim()) ?? 0.0,
-      description: _descriptionController.text.trim(),
-      status: ClaimStatus.submitted,
-      documents: allDocuments,
-      createdAt: DateTime.now(),
-      claimantName: _claimantNameController.text.trim(),
-      contactNumber: _contactNumberController.text.trim(),
-      vehicleRegistrationNumber: _vehicleRegController.text.trim().toUpperCase(),
-      vehicleMake: _vehicleMakeController.text.trim(),
-      vehicleModel: _vehicleModelController.text.trim(),
-      vehicleYear: _vehicleYear,
-      vehicleType: _vehicleType,
-      incidentDate: _incidentDate,
-      incidentTime: timeString,
-      incidentLocation: _incidentLocationController.text.trim(),
-      incidentType: _incidentType,
-      damageSeverity: _damageSeverity,
-      isVehicleDrivable: _isVehicleDrivable,
-      policeReportFiled: _policeReportFiled,
-      policeReportNumber: _policeReportFiled ? _policeReportNumberController.text.trim() : null,
-      driverName: _driverNameController.text.trim().isEmpty
-          ? _claimantNameController.text.trim()
-          : _driverNameController.text.trim(),
-      driverLicenseNumber: _driverLicenseController.text.trim(),
-      relationshipToInsured: _relationshipToInsured,
-      thirdPartyInvolved: _thirdPartyInvolved,
-      thirdPartyName: _thirdPartyInvolved ? _thirdPartyNameController.text.trim() : null,
-      thirdPartyVehicleNumber:
-          _thirdPartyInvolved ? _thirdPartyVehicleController.text.trim().toUpperCase() : null,
-      thirdPartyContact: _thirdPartyInvolved ? _thirdPartyContactController.text.trim() : null,
-      thirdPartyInsurance: _thirdPartyInvolved ? _thirdPartyInsuranceController.text.trim() : null,
-      notes: 'Lodged via Insure-Plus Motor Claims Mobile App. Photos uploaded to Firebase.',
-    );
+      final newClaim = MotorClaim(
+        claimId: newClaimId,
+        userId: user.uid,
+        policyId: _policyIdController.text.trim(),
+        claimType: 'Motor Claim',
+        claimAmount: double.parse(_claimAmountController.text.trim()),
+        description: _descriptionController.text.trim(),
+        status: ClaimStatus.submitted,
+        documents: uploadedDocuments,
+        createdAt: DateTime.now(),
+        claimantName: _claimantNameController.text.trim(),
+        contactNumber: _contactNumberController.text.trim(),
+        vehicleRegistrationNumber: _vehicleRegController.text
+            .trim()
+            .toUpperCase(),
+        vehicleMake: _vehicleMakeController.text.trim(),
+        vehicleModel: _vehicleModelController.text.trim(),
+        vehicleYear: _vehicleYear,
+        vehicleType: _vehicleType,
+        incidentDate: _incidentDate,
+        incidentTime: incidentTimeText,
+        incidentLocation: _incidentLocationController.text.trim(),
+        incidentType: _incidentType,
+        damageSeverity: _damageSeverity,
+        isVehicleDrivable: _isVehicleDrivable,
+        policeReportFiled: _policeReportFiled,
+        policeReportNumber: _policeReportFiled
+            ? _policeReportNumberController.text.trim()
+            : null,
+        driverName: _driverNameController.text.trim().isEmpty
+            ? _claimantNameController.text.trim()
+            : _driverNameController.text.trim(),
+        driverLicenseNumber: _driverLicenseController.text.trim(),
+        relationshipToInsured: _relationshipToInsured,
+        thirdPartyInvolved: _thirdPartyInvolved,
+        thirdPartyName: _thirdPartyInvolved
+            ? _thirdPartyNameController.text.trim()
+            : null,
+        thirdPartyVehicleNumber: _thirdPartyInvolved
+            ? _thirdPartyVehicleController.text.trim().toUpperCase()
+            : null,
+        thirdPartyContact: _thirdPartyInvolved
+            ? _thirdPartyContactController.text.trim()
+            : null,
+        thirdPartyInsurance: _thirdPartyInvolved
+            ? _thirdPartyInsuranceController.text.trim()
+            : null,
+        notes: 'Submitted through the Insure-Plus mobile application.',
+      );
 
-    // Adds locally and syncs to Firebase Firestore
-    claimService.addClaim(newClaim);
-
-    setState(() {
-      _isSubmitting = false;
-    });
-
-    if (!mounted) return;
-
-    // Show Success Confirmation Dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: const [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
-            SizedBox(width: 8),
-            Text('Claim Submitted!'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Your motor insurance claim and accident photos have been successfully submitted.',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.indigo.shade50,
-                borderRadius: BorderRadius.circular(8),
+      await claimService.addClaim(newClaim);
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 8),
+              Text('Claim Submitted!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Your claim details and documents were saved to Supabase.',
               ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Claim Reference ID:', style: TextStyle(fontWeight: FontWeight.w600)),
-                      Text(
-                        newClaimId,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Attached Documents:', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                      Text(
-                        '${allDocuments.length} files',
-                        style: const TextStyle(fontSize: 12, color: Colors.indigo, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Firebase Sync:', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                      Text(
-                        claimService.firebaseService.isFirebaseAvailable ? 'Cloud Synced' : 'Ready for Sync',
-                        style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              const SizedBox(height: 12),
+              Text('Claim reference: $newClaimId'),
+              Text('Files uploaded: ${uploadedDocuments.length}'),
+              Text('Status: ${ClaimStatus.submitted.value}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+              },
+              child: const Text('Return to Portal'),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'An authorized motor surveyor will review your damage photos and contact you within 24 hours.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        MotorClaimDetailsScreen(claimId: newClaimId),
+                  ),
+                );
+              },
+              child: const Text('View Claim Details'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
-            child: const Text('Return to Portal'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MotorClaimDetailsScreen(claimId: newClaimId),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('View Claim Details'),
-          ),
-        ],
-      ),
-    );
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Claim submission failed: $error'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } finally {
+      if (mounted && _isSubmitting) setState(() => _isSubmitting = false);
+    }
   }
 
   Widget _buildSectionCard({
@@ -365,36 +371,43 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
     required List<Widget> children,
   }) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 16.0),
-      elevation: 1.5,
+      margin: const EdgeInsets.only(bottom: 14),
+      elevation: 0,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: InsureCareTheme.border, width: 0.7),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.indigo.shade50,
-                  child: Icon(icon, color: Colors.indigo, size: 18),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: InsureCareTheme.paleBlue,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(icon, color: InsureCareTheme.iconBlue, size: 19),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: InsureCareTheme.text,
+                    ),
                   ),
                 ),
               ],
             ),
-            const Divider(height: 20),
+            const SizedBox(height: 15),
             ...children,
           ],
         ),
@@ -410,55 +423,58 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
         '${_incidentTime.hour.toString().padLeft(2, '0')}:${_incidentTime.minute.toString().padLeft(2, '0')}';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('File Motor Claim'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Submit a claim')),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Let's get you covered.",
+                    style: TextStyle(
+                      color: InsureCareTheme.navy,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 7),
+                  Text(
+                    'Submit your motor claim in a few simple steps.',
+                    style: TextStyle(
+                      color: InsureCareTheme.muted,
+                      fontSize: 13,
+                    ),
+                  ),
+                  SizedBox(height: 15),
+                  _ClaimFormTip(),
+                ],
+              ),
+            ),
             // Section 1: Policy & Claimant Details (Shared Schema)
             _buildSectionCard(
               title: '1. Policy & User Identification',
               icon: Icons.badge_outlined,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _userIdController,
-                        decoration: const InputDecoration(
-                          labelText: 'User ID (userId) *',
-                          hintText: 'e.g. USR-78401',
-                          prefixIcon: Icon(Icons.account_circle_outlined),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) return 'User ID required';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _policyIdController,
-                        decoration: const InputDecoration(
-                          labelText: 'Policy ID (policyId) *',
-                          hintText: 'e.g. POL-MOT-88231',
-                          prefixIcon: Icon(Icons.shield_outlined),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty || val.trim() == 'POL-MOT-') {
-                            return 'Valid Policy ID required';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                  ],
+                TextFormField(
+                  controller: _policyIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Policy number *',
+                    hintText: 'e.g. POL-MOT-88231',
+                    prefixIcon: Icon(Icons.shield_outlined),
+                  ),
+                  validator: (val) {
+                    if (val == null ||
+                        val.trim().isEmpty ||
+                        val.trim() == 'POL-MOT-') {
+                      return 'Valid policy number required';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -469,7 +485,8 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty) return 'Please enter claimant name';
+                    if (val == null || val.trim().isEmpty)
+                      return 'Please enter claimant name';
                     return null;
                   },
                 ),
@@ -483,7 +500,8 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     prefixIcon: Icon(Icons.phone_outlined),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty) return 'Contact number required';
+                    if (val == null || val.trim().isEmpty)
+                      return 'Contact number required';
                     return null;
                   },
                 ),
@@ -520,7 +538,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                           labelText: 'Make *',
                           hintText: 'e.g. Toyota',
                         ),
-                        validator: (val) => (val == null || val.trim().isEmpty) ? 'Required' : null,
+                        validator: (val) => (val == null || val.trim().isEmpty)
+                            ? 'Required'
+                            : null,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -531,7 +551,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                           labelText: 'Model *',
                           hintText: 'e.g. Corolla',
                         ),
-                        validator: (val) => (val == null || val.trim().isEmpty) ? 'Required' : null,
+                        validator: (val) => (val == null || val.trim().isEmpty)
+                            ? 'Required'
+                            : null,
                       ),
                     ),
                   ],
@@ -544,7 +566,12 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                         initialValue: _vehicleYear,
                         decoration: const InputDecoration(labelText: 'Year'),
                         items: List.generate(25, (index) => 2026 - index)
-                            .map((y) => DropdownMenuItem(value: y, child: Text(y.toString())))
+                            .map(
+                              (y) => DropdownMenuItem(
+                                value: y,
+                                child: Text(y.toString()),
+                              ),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) setState(() => _vehicleYear = val);
@@ -555,9 +582,13 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _vehicleType,
-                        decoration: const InputDecoration(labelText: 'Vehicle Type'),
+                        decoration: const InputDecoration(
+                          labelText: 'Vehicle Type',
+                        ),
                         items: _vehicleTypes
-                            .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                            .map(
+                              (t) => DropdownMenuItem(value: t, child: Text(t)),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) setState(() => _vehicleType = val);
@@ -602,7 +633,8 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     prefixIcon: Icon(Icons.location_on_outlined),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty) return 'Accident location required';
+                    if (val == null || val.trim().isEmpty)
+                      return 'Accident location required';
                     return null;
                   },
                 ),
@@ -613,12 +645,16 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                       child: DropdownButtonFormField<String>(
                         initialValue: _incidentType,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'Incident Type'),
+                        decoration: const InputDecoration(
+                          labelText: 'Incident Type',
+                        ),
                         items: _incidentTypes
-                            .map((t) => DropdownMenuItem(
-                                  value: t,
-                                  child: Text(t, overflow: TextOverflow.ellipsis),
-                                ))
+                            .map(
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(t, overflow: TextOverflow.ellipsis),
+                              ),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) setState(() => _incidentType = val);
@@ -629,12 +665,17 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _damageSeverity,
-                        decoration: const InputDecoration(labelText: 'Damage Severity'),
+                        decoration: const InputDecoration(
+                          labelText: 'Damage Severity',
+                        ),
                         items: _severities
-                            .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                            .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)),
+                            )
                             .toList(),
                         onChanged: (val) {
-                          if (val != null) setState(() => _damageSeverity = val);
+                          if (val != null)
+                            setState(() => _damageSeverity = val);
                         },
                       ),
                     ),
@@ -644,18 +685,22 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Is the vehicle drivable?'),
-                  subtitle: Text(_isVehicleDrivable
-                      ? 'Vehicle is operational'
-                      : 'Vehicle requires towing assistance'),
+                  subtitle: Text(
+                    _isVehicleDrivable
+                        ? 'Vehicle is operational'
+                        : 'Vehicle requires towing assistance',
+                  ),
                   value: _isVehicleDrivable,
                   onChanged: (val) => setState(() => _isVehicleDrivable = val),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Was a police report filed?'),
-                  subtitle: Text(_policeReportFiled
-                      ? 'Police entry recorded'
-                      : 'No police report filed'),
+                  subtitle: Text(
+                    _policeReportFiled
+                        ? 'Police entry recorded'
+                        : 'No police report filed',
+                  ),
                   value: _policeReportFiled,
                   onChanged: (val) => setState(() => _policeReportFiled = val),
                 ),
@@ -669,7 +714,8 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                       prefixIcon: Icon(Icons.local_police_outlined),
                     ),
                     validator: (val) {
-                      if (_policeReportFiled && (val == null || val.trim().isEmpty)) {
+                      if (_policeReportFiled &&
+                          (val == null || val.trim().isEmpty)) {
                         return 'Please provide police report reference';
                       }
                       return null;
@@ -703,7 +749,8 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                           hintText: 'e.g. B1234567',
                         ),
                         validator: (val) {
-                          if (val == null || val.trim().isEmpty) return 'License number required';
+                          if (val == null || val.trim().isEmpty)
+                            return 'License number required';
                           return null;
                         },
                       ),
@@ -712,12 +759,17 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _relationshipToInsured,
-                        decoration: const InputDecoration(labelText: 'Relationship to Insured'),
+                        decoration: const InputDecoration(
+                          labelText: 'Relationship to Insured',
+                        ),
                         items: _relationships
-                            .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                            .map(
+                              (r) => DropdownMenuItem(value: r, child: Text(r)),
+                            )
                             .toList(),
                         onChanged: (val) {
-                          if (val != null) setState(() => _relationshipToInsured = val);
+                          if (val != null)
+                            setState(() => _relationshipToInsured = val);
                         },
                       ),
                     ),
@@ -727,7 +779,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Was a third party involved?'),
-                  subtitle: const Text('Another vehicle, pedestrian, or third-party property'),
+                  subtitle: const Text(
+                    'Another vehicle, pedestrian, or third-party property',
+                  ),
                   value: _thirdPartyInvolved,
                   onChanged: (val) => setState(() => _thirdPartyInvolved = val),
                 ),
@@ -785,16 +839,20 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
               children: [
                 TextFormField(
                   controller: _claimAmountController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Claim Amount (\$) [Shared Field] *',
                     hintText: 'e.g. 1500.00',
                     prefixIcon: Icon(Icons.monetization_on_outlined),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty) return 'Please enter claim amount';
+                    if (val == null || val.trim().isEmpty)
+                      return 'Please enter claim amount';
                     final n = double.tryParse(val.trim());
-                    if (n == null || n <= 0) return 'Please enter a valid positive number';
+                    if (n == null || n <= 0)
+                      return 'Please enter a valid positive number';
                     return null;
                   },
                 ),
@@ -822,52 +880,98 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
               title: '6. Accident Photos & Supporting Documents',
               icon: Icons.add_a_photo_outlined,
               children: [
-                // Accident Photos Uploader
-                AccidentPhotoUploadWidget(
-                  photos: _accidentPhotoDocs,
-                  onAddPhoto: (photoName) {
-                    setState(() {
-                      if (!_accidentPhotoDocs.any((p) => p.fileName == photoName)) {
-                        _accidentPhotoDocs.add(
-                          ClaimDocument(
-                            documentId: 'PHOTO-${DateTime.now().millisecondsSinceEpoch}',
-                            documentType: 'AccidentPhoto',
-                            fileName: photoName,
-                            fileUrl: 'gs://insure-plus.appspot.com/motor_claims/photos/$photoName',
-                            uploadedAt: DateTime.now(),
-                          ),
-                        );
-                      }
-                    });
-                  },
-                  onRemovePhoto: (photoDoc) {
-                    setState(() {
-                      _accidentPhotoDocs.remove(photoDoc);
-                    });
-                  },
-                ),
-
-                const Divider(height: 28),
-
-                // Supporting Documents Checklist
                 const Text(
-                  'Supporting Documents (documents):',
+                  'Accident Photos',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                 ),
                 const SizedBox(height: 8),
-                ..._supportingDocuments.keys.map((docTitle) {
-                  final isAttached = _supportingDocuments[docTitle] ?? false;
-                  return DocumentPickerTile(
-                    title: docTitle,
-                    subtitle: isAttached ? 'Document file attached' : 'Tap to attach document',
-                    isAttached: isAttached,
-                    onToggle: () {
-                      setState(() {
-                        _supportingDocuments[docTitle] = !isAttached;
-                      });
-                    },
-                  );
-                }),
+                OutlinedButton.icon(
+                  onPressed: _isSubmitting ? null : _pickAccidentPhotos,
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: const Text('Choose Accident Photos'),
+                ),
+                if (_selectedAccidentPhotos.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'No photos selected. Add at least one accident photo.',
+                    ),
+                  )
+                else
+                  ..._selectedAccidentPhotos.asMap().entries.map(
+                    (entry) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.image_outlined,
+                        color: InsureCareTheme.navy,
+                      ),
+                      title: Text(
+                        entry.value.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: const Text('Selected for upload'),
+                      trailing: IconButton(
+                        tooltip: 'Remove photo',
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => setState(
+                                () =>
+                                    _selectedAccidentPhotos.removeAt(entry.key),
+                              ),
+                      ),
+                    ),
+                  ),
+
+                const Divider(height: 28),
+
+                const Text(
+                  'Supporting Documents',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _isSubmitting ? null : _pickSupportingDocuments,
+                  icon: const Icon(Icons.attach_file),
+                  label: const Text('Choose Supporting Documents'),
+                ),
+                if (_selectedSupportingFiles.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Optional: Add a police report, driving licence, or repair quotation.',
+                    ),
+                  )
+                else
+                  ..._selectedSupportingFiles.asMap().entries.map(
+                    (entry) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.description_outlined,
+                        color: InsureCareTheme.navy,
+                      ),
+                      title: Text(
+                        entry.value.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: const Text('Selected for upload'),
+                      trailing: IconButton(
+                        tooltip: 'Remove document',
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => setState(
+                                () => _selectedSupportingFiles.removeAt(
+                                  entry.key,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
               ],
             ),
 
@@ -894,17 +998,27 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
                       )
                     : const Icon(Icons.send_rounded),
                 label: Text(
-                  _isSubmitting ? 'Submitting to Firebase...' : 'Submit Motor Claim',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  _isSubmitting
+                      ? 'Submitting your claim...'
+                      : 'Submit Motor Claim',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
+                  backgroundColor: InsureCareTheme.navy,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -912,6 +1026,56 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ClaimFormTip extends StatelessWidget {
+  const _ClaimFormTip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: InsureCareTheme.paleBlue,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.shield_outlined,
+            color: InsureCareTheme.iconBlue,
+            size: 21,
+          ),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Here when you need us.',
+                  style: TextStyle(
+                    color: InsureCareTheme.navy,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Keep your policy information, accident details and supporting documents ready.',
+                  style: TextStyle(
+                    color: InsureCareTheme.muted,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

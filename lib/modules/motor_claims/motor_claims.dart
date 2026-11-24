@@ -10,7 +10,9 @@ export 'models/claim_milestone.dart';
 export 'models/motor_claim.dart';
 
 // Services
-export 'services/motor_claim_firebase_service.dart';
+export 'services/firebase_auth_service.dart';
+export 'services/motor_claim_supabase_service.dart';
+export 'services/motor_claim_storage_service.dart';
 export 'services/motor_claim_service.dart';
 
 // Widgets

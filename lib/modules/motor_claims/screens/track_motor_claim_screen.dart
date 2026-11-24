@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../common/theme/insurecare_theme.dart';
 import '../models/motor_claim.dart';
 import '../services/motor_claim_service.dart';
 import '../widgets/claim_status_badge.dart';
@@ -9,10 +11,7 @@ import 'motor_claim_details_screen.dart';
 class TrackMotorClaimScreen extends StatefulWidget {
   final String? initialQuery;
 
-  const TrackMotorClaimScreen({
-    super.key,
-    this.initialQuery,
-  });
+  const TrackMotorClaimScreen({super.key, this.initialQuery});
 
   @override
   State<TrackMotorClaimScreen> createState() => _TrackMotorClaimScreenState();
@@ -28,10 +27,6 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
     super.initState();
     if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
       _queryController.text = widget.initialQuery!;
-      _performSearch();
-    } else {
-      // Default sample query for immediate demonstration
-      _queryController.text = 'CLM-MOT-2026-001';
       _performSearch();
     }
   }
@@ -58,11 +53,7 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Track Motor Claim'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Track claim')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -71,7 +62,9 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
             // Search Input Box
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -79,7 +72,10 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                   children: [
                     const Text(
                       'Enter Claim ID or Vehicle Number',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -89,10 +85,14 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                             controller: _queryController,
                             textCapitalization: TextCapitalization.characters,
                             decoration: InputDecoration(
-                              hintText: 'e.g. CLM-MOT-2026-001 or WP-CAD-4589',
+                              hintText:
+                                  'Your claim reference or vehicle number',
                               filled: true,
-                              fillColor: Colors.grey.shade50,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              fillColor: InsureCareTheme.background,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -104,10 +104,15 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                         ElevatedButton(
                           onPressed: _performSearch,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
+                            backgroundColor: InsureCareTheme.navy,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                           child: const Text('Track'),
                         ),
@@ -127,17 +132,27 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                   padding: const EdgeInsets.all(32.0),
                   child: Column(
                     children: [
-                      Icon(Icons.search_off_rounded, size: 54, color: Colors.grey.shade400),
+                      Icon(
+                        Icons.search_off_rounded,
+                        size: 54,
+                        color: Colors.grey.shade400,
+                      ),
                       const SizedBox(height: 12),
                       const Text(
                         'No claim matches that reference.',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         'Please verify your claim reference ID or vehicle registration number and try again.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -147,7 +162,9 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
               // Summary Banner
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -163,7 +180,7 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.indigo,
+                                color: InsureCareTheme.navy,
                               ),
                             ),
                           ),
@@ -174,12 +191,18 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                       const Divider(height: 20),
                       Text(
                         _searchedClaim!.vehicleDisplayName,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Policy: ${_searchedClaim!.policyId}  •  Status: ${_searchedClaim!.status.value}',
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -200,7 +223,9 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
               // Tracking Stepper
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -208,10 +233,15 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                     children: [
                       const Text(
                         'Live Milestone Status',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      ClaimTimelineWidget(milestones: _searchedClaim!.trackingMilestones),
+                      ClaimTimelineWidget(
+                        milestones: _searchedClaim!.trackingMilestones,
+                      ),
                     ],
                   ),
                 ),
@@ -227,17 +257,21 @@ class _TrackMotorClaimScreenState extends State<TrackMotorClaimScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => MotorClaimDetailsScreen(claimId: _searchedClaim!.claimId),
+                        builder: (_) => MotorClaimDetailsScreen(
+                          claimId: _searchedClaim!.claimId,
+                        ),
                       ),
                     );
                   },
                   icon: const Icon(Icons.arrow_forward_rounded),
                   label: const Text('View Full Claim Details'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
+                    backgroundColor: InsureCareTheme.navy,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),

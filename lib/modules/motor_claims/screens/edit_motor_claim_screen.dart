@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../common/theme/insurecare_theme.dart';
 import '../models/motor_claim.dart';
 import '../services/motor_claim_service.dart';
 
@@ -6,10 +8,7 @@ import '../services/motor_claim_service.dart';
 class EditMotorClaimScreen extends StatefulWidget {
   final MotorClaim claim;
 
-  const EditMotorClaimScreen({
-    super.key,
-    required this.claim,
-  });
+  const EditMotorClaimScreen({super.key, required this.claim});
 
   @override
   State<EditMotorClaimScreen> createState() => _EditMotorClaimScreenState();
@@ -33,11 +32,21 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
   @override
   void initState() {
     super.initState();
-    _contactNumberController = TextEditingController(text: widget.claim.contactNumber);
-    _claimAmountController = TextEditingController(text: widget.claim.claimAmount.toStringAsFixed(2));
-    _descriptionController = TextEditingController(text: widget.claim.description);
-    _locationController = TextEditingController(text: widget.claim.incidentLocation);
-    _driverNameController = TextEditingController(text: widget.claim.driverName);
+    _contactNumberController = TextEditingController(
+      text: widget.claim.contactNumber,
+    );
+    _claimAmountController = TextEditingController(
+      text: widget.claim.claimAmount.toStringAsFixed(2),
+    );
+    _descriptionController = TextEditingController(
+      text: widget.claim.description,
+    );
+    _locationController = TextEditingController(
+      text: widget.claim.incidentLocation,
+    );
+    _driverNameController = TextEditingController(
+      text: widget.claim.driverName,
+    );
     _notesController = TextEditingController(text: widget.claim.notes ?? '');
 
     _damageSeverity = widget.claim.damageSeverity;
@@ -55,13 +64,12 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
     super.dispose();
   }
 
-  void _handleSave() {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+  Future<void> _handleSave() async {
+    if (!_formKey.currentState!.validate()) return;
 
-    final amount = double.tryParse(_claimAmountController.text.trim()) ?? widget.claim.claimAmount;
-
+    final amount =
+        double.tryParse(_claimAmountController.text.trim()) ??
+        widget.claim.claimAmount;
     final updatedClaim = widget.claim.copyWith(
       contactNumber: _contactNumberController.text.trim(),
       claimAmount: amount,
@@ -70,28 +78,36 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
       driverName: _driverNameController.text.trim(),
       damageSeverity: _damageSeverity,
       isVehicleDrivable: _isVehicleDrivable,
-      notes: _notesController.text.trim().isEmpty ? widget.claim.notes : _notesController.text.trim(),
+      notes: _notesController.text.trim().isEmpty
+          ? widget.claim.notes
+          : _notesController.text.trim(),
     );
 
-    MotorClaimService().updateClaim(updatedClaim);
-
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Claim details updated & synced to Firebase!'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    try {
+      await MotorClaimService().updateClaim(updatedClaim);
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Claim details saved to Supabase.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save claim changes: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Edit Claim: ${widget.claim.claimId}'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Edit claim')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -99,22 +115,30 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
           children: [
             // Vehicle & Policy Info Banner (Read-only)
             Card(
-              color: Colors.indigo.shade50,
+              color: InsureCareTheme.paleBlue,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(15.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       widget.claim.vehicleDisplayName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14.5,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Policy ID: ${widget.claim.policyId}  •  Status: ${widget.claim.status.value}',
-                      style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.grey.shade700,
+                      ),
                     ),
                   ],
                 ),
@@ -178,7 +202,9 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _claimAmountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Claim Amount (\$) [Shared]',
                       prefixIcon: Icon(Icons.monetization_on_outlined),
@@ -199,7 +225,9 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _damageSeverity,
-                    decoration: const InputDecoration(labelText: 'Damage Severity'),
+                    decoration: const InputDecoration(
+                      labelText: 'Damage Severity',
+                    ),
                     items: _severities
                         .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                         .toList(),
@@ -216,7 +244,9 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Is the vehicle drivable?'),
-              subtitle: Text(_isVehicleDrivable ? 'Yes, roadworthy' : 'No, immobilized'),
+              subtitle: Text(
+                _isVehicleDrivable ? 'Yes, roadworthy' : 'No, immobilized',
+              ),
               value: _isVehicleDrivable,
               onChanged: (val) => setState(() => _isVehicleDrivable = val),
             ),
@@ -255,12 +285,17 @@ class _EditMotorClaimScreenState extends State<EditMotorClaimScreen> {
             ElevatedButton.icon(
               onPressed: _handleSave,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Save & Sync Changes', style: TextStyle(fontSize: 16)),
+              label: const Text(
+                'Save & Sync Changes',
+                style: TextStyle(fontSize: 16),
+              ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
+                backgroundColor: InsureCareTheme.navy,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
 
