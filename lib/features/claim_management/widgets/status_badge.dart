@@ -9,30 +9,41 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final (background, foreground) = switch (status) {
       ClaimStatus.submitted => (
-        colors.surfaceContainerHighest,
-        colors.onSurface,
+        const Color(0xFFFFF1D7),
+        const Color(0xFF704B0C),
       ),
       ClaimStatus.underReview => (
-        colors.secondaryContainer,
-        colors.onSecondaryContainer,
+        const Color(0xFFE5EEFF),
+        const Color(0xFF214F91),
       ),
       ClaimStatus.moreInfoRequired => (
-        colors.tertiaryContainer,
-        colors.onTertiaryContainer,
+        const Color(0xFFFFEADB),
+        const Color(0xFF813D18),
       ),
       ClaimStatus.approved => (
-        colors.primaryContainer,
-        colors.onPrimaryContainer,
+        const Color(0xFFE0F4E9),
+        const Color(0xFF17613D),
       ),
-      ClaimStatus.rejected => (colors.errorContainer, colors.onErrorContainer),
+      ClaimStatus.rejected => (
+        const Color(0xFFFFE8EC),
+        const Color(0xFF93263C),
+      ),
     };
-    return Chip(
-      label: Text(status.label, style: TextStyle(color: foreground)),
-      backgroundColor: background,
-      side: BorderSide.none,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          status.label,
+          style: Theme.of(context).textTheme.labelMedium
+              ?.copyWith(color: foreground, fontWeight: FontWeight.w600),
+        ),
+      ),
     );
   }
 }

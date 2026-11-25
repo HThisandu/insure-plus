@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/claim_scaffold.dart';
+
 import '../models/claim.dart';
 import '../services/claim_service.dart';
 import '../widgets/claim_card.dart';
@@ -24,8 +26,8 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Claims')),
+    return ClaimScaffold(
+      title: 'Claims',
       body: SafeArea(
         child: ListenableBuilder(
           listenable: widget.service,
