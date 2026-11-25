@@ -1,5 +1,6 @@
-
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -10,6 +11,8 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _authService = AuthService();
+  bool _isLoading = false;
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -34,38 +37,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  InputDecoration _decoration(
-    String hint,
-    IconData icon, {
-    Widget? suffix,
-  }) {
+  InputDecoration _decoration(String hint, IconData icon, {Widget? suffix}) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(
-        color: muted,
-        fontSize: 14,
-      ),
+      hintStyle: const TextStyle(color: muted, fontSize: 14),
       prefixIcon: Icon(icon, color: muted, size: 20),
       suffixIcon: suffix,
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 16,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(0xFFDCE4EF),
-        ),
+        borderSide: const BorderSide(color: Color(0xFFDCE4EF)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: navy),
       ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 
@@ -83,17 +72,82 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  void _register() {
-    if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Validation successful. Firebase connection pending.',
-          ),
+  
+Future<void> _register() async {
+  if (_isLoading || !_formKey.currentState!.validate()) {
+    return;
+  }
+
+  setState(() {
+    _isLoading = true;
+  });
+
+  try {
+    await _authService.registerUser(
+      fullName: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+      phoneNumber: _phoneController.text.trim(),
+    );
+
+    await _authService.logoutUser();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Account created successfully. Please log in.',
         ),
-      );
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    Navigator.pop(context);
+  } on FirebaseAuthException catch (e) {
+    if (!mounted) return;
+
+    String message = 'Registration failed. Please try again.';
+
+    switch (e.code) {
+      case 'email-already-in-use':
+        message = 'This email is already registered.';
+        break;
+      case 'weak-password':
+        message = 'Please use a stronger password.';
+        break;
+      case 'invalid-email':
+        message = 'Please enter a valid email address.';
+        break;
+      case 'network-request-failed':
+        message = 'Please check your internet connection.';
+        break;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Registration failed. Please try again.'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -109,10 +163,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 TextButton.icon(
                   onPressed: () => Navigator.maybePop(context),
-                  icon: const Icon(
-                    Icons.arrow_back_ios,
-                    size: 16,
-                  ),
+                  icon: const Icon(Icons.arrow_back_ios, size: 16),
                   label: const Text('Back'),
                   style: TextButton.styleFrom(
                     foregroundColor: navy,
@@ -136,10 +187,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const Text(
                   'Create your Insure Plus account.',
-                  style: TextStyle(
-                    color: muted,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(color: muted, fontSize: 15),
                 ),
 
                 const SizedBox(height: 28),
@@ -150,10 +198,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _nameController,
                   textCapitalization: TextCapitalization.words,
-                  decoration: _decoration(
-                    'Alex Morgan',
-                    Icons.person_outline,
-                  ),
+                  decoration: _decoration('Alex Morgan', Icons.person_outline),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter your full name';
@@ -179,9 +224,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       return 'Please enter your email';
                     }
 
-                    if (!RegExp(
-                      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-                    ).hasMatch(value.trim())) {
+                    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                        .hasMatch(value.trim())) {
                       return 'Please enter a valid email';
                     }
 
@@ -206,14 +250,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       return 'Please enter your phone number';
                     }
 
-                    final phone = value.replaceAll(
-                      RegExp(r'[\s-]'),
-                      '',
-                    );
+                    final phone = value.replaceAll(RegExp(r'[\s-]'), '');
 
-                    if (!RegExp(
-                      r'^\+?[0-9]{9,15}$',
-                    ).hasMatch(phone)) {
+                    if (!RegExp(r'^\+?[0-9]{9,15}$').hasMatch(phone)) {
                       return 'Please enter a valid phone number';
                     }
 
@@ -287,8 +326,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       onPressed: () {
                         setState(() {
-                          _hideConfirmPassword =
-                              !_hideConfirmPassword;
+                          _hideConfirmPassword = !_hideConfirmPassword;
                         });
                       },
                     ),
@@ -310,10 +348,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const Text(
                   'Use 8+ characters, a number and a symbol.',
-                  style: TextStyle(
-                    color: muted,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: muted, fontSize: 12),
                 ),
 
                 const SizedBox(height: 22),
@@ -321,11 +356,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const Text(
                   'By creating an account, you agree to our '
                   'Terms of Service and Privacy Policy.',
-                  style: TextStyle(
-                    color: muted,
-                    fontSize: 12,
-                    height: 1.5,
-                  ),
+                  style: TextStyle(color: muted, fontSize: 12, height: 1.5),
                 ),
 
                 const SizedBox(height: 24),
@@ -335,7 +366,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: _register,
+                    onPressed: _isLoading ? null : _register,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: navy,
                       foregroundColor: Colors.white,
