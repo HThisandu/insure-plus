@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/claim_scaffold.dart';
+
 import '../models/claim.dart';
 import '../services/claim_service.dart';
 import 'claims_list_screen.dart';
@@ -20,17 +22,38 @@ class ClaimsDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Claim Management')),
+    return ClaimScaffold(
+      title: 'Claim Management',
       body: SafeArea(
         child: ListenableBuilder(
           listenable: service,
           builder: (context, _) => ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Text(
-                'Claims dashboard',
-                style: Theme.of(context).textTheme.headlineSmall,
+              Card(
+                color: ClaimScaffold.navy,
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.assignment_outlined,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Claims dashboard',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               FilledButton.icon(

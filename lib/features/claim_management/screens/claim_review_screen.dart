@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/claim_scaffold.dart';
+
 import '../models/claim.dart';
 import '../services/claim_service.dart';
 import '../widgets/status_badge.dart';
@@ -22,24 +24,39 @@ class _ClaimReviewScreenState extends State<ClaimReviewScreen> {
   ClaimStatus? _nextStatus;
   bool _stale = false;
 
-  void _save() {
+  bool _saving = false;
+  bool _saveFailed = false;
+
+  Future<void> _save() async {
     final nextStatus = _nextStatus;
-    if (nextStatus == null) return;
-    if (widget.service.updateStatus(
-      widget.claim.claimId,
-      widget.claim.status,
-      nextStatus,
-    )) {
-      Navigator.of(context).pop(nextStatus.label);
-    } else {
-      setState(() => _stale = true);
+    if (nextStatus == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _saveFailed = false;
+    });
+    try {
+      final saved = await widget.service.updateStatus(
+        widget.claim.claimId,
+        widget.claim.status,
+        nextStatus,
+      );
+      if (!mounted) return;
+      if (saved && ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.of(context).pop(nextStatus.label);
+      } else {
+        setState(() => _stale = true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _saveFailed = true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Review claim')),
+    return ClaimScaffold(
+      title: 'Review claim',
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(24),
@@ -64,10 +81,14 @@ class _ClaimReviewScreenState extends State<ClaimReviewScreen> {
                 ))
                   DropdownMenuItem(value: status, child: Text(status.label)),
               ],
-              onChanged: _stale
+              onChanged: _stale || _saving
                   ? null
                   : (status) => setState(() => _nextStatus = status),
             ),
+            if (_saveFailed)
+              const Text(
+                'Unable to save status. Check your access and connection, then retry.',
+              ),
             if (_stale)
               const Padding(
                 padding: EdgeInsets.only(top: 12),
@@ -77,8 +98,10 @@ class _ClaimReviewScreenState extends State<ClaimReviewScreen> {
               ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: _nextStatus == null || _stale ? null : _save,
-              child: const Text('Save status'),
+              onPressed: _nextStatus == null || _stale || _saving
+                  ? null
+                  : _save,
+              child: Text(_saving ? 'Saving…' : 'Save status'),
             ),
           ],
         ),
