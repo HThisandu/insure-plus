@@ -21,10 +21,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'InsureCare',
+      title: 'Insure Plus',
       debugShowCheckedModeBanner: false,
       theme: InsureCareTheme.light,
-      home: const MyHomePage(title: 'InsureCare'),
+      home: const MyHomePage(title: 'Insure Plus'),
       routes: {
         '/motor-claims': (context) => const MotorClaimsDashboardScreen(),
       },
@@ -32,7 +32,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// InsureCare landing screen styled from the supplied Figma home dashboard.
+/// Insure Plus landing screen styled from the supplied Figma home dashboard.
 /// The summary is populated only from real Motor Claims records.
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
