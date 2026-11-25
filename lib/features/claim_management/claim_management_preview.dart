@@ -57,6 +57,7 @@ class _ClaimManagementPreviewState extends State<ClaimManagementPreview> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Claim Management Preview',
       home: ClaimsDashboardScreen(service: _service),
     );
