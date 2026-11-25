@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
@@ -40,12 +41,26 @@ class AuthService {
   Future<UserCredential> loginUser({
     required String email,
     required String password,
+    bool rememberMe = true,
   }) async {
-    return await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    if (kIsWeb) {
+      await _auth.setPersistence(
+        rememberMe ? Persistence.LOCAL : Persistence.SESSION,
+      );
+    }
+    return _auth.signInWithEmailAndPassword(email: email, password: password);
   }
+
+  Future<void> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (error) {
+      if (error.code != 'user-not-found') rethrow;
+    }
+  }
+
+  DocumentReference<Map<String, dynamic>> profile(String uid) =>
+      _firestore.collection('users').doc(uid);
 
   Future<void> logoutUser() async {
     await _auth.signOut();

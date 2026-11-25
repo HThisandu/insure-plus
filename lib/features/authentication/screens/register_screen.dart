@@ -151,6 +151,10 @@ Future<void> _register() async {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(canPop: !_isLoading, child: _buildRegistration(context));
+  }
+
+  Widget _buildRegistration(BuildContext context) {
     return Scaffold(
       backgroundColor: background,
       body: SafeArea(
@@ -162,7 +166,7 @@ Future<void> _register() async {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextButton.icon(
-                  onPressed: () => Navigator.maybePop(context),
+                  onPressed: _isLoading ? null : () => Navigator.maybePop(context),
                   icon: const Icon(Icons.arrow_back_ios, size: 16),
                   label: const Text('Back'),
                   style: TextButton.styleFrom(
@@ -402,7 +406,7 @@ Future<void> _register() async {
                       style: TextStyle(color: muted),
                     ),
                     TextButton(
-                      onPressed: () => Navigator.maybePop(context),
+                      onPressed: _isLoading ? null : () => Navigator.maybePop(context),
                       child: const Text(
                         'Log in',
                         style: TextStyle(

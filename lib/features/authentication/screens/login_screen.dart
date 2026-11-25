@@ -1,4 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../../../services/auth_service.dart';
 
 import 'register_screen.dart';
 
@@ -11,9 +15,11 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _emailFieldKey = GlobalKey<FormFieldState<String>>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  bool _busy = false;
   bool _rememberMe = true;
   bool _hidePassword = true;
 
@@ -31,6 +37,48 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _submit({required bool reset}) async {
+    if (_busy) return;
+    final valid = reset
+        ? _emailFieldKey.currentState!.validate()
+        : _formKey.currentState!.validate();
+    if (!valid) return;
+    final email = _emailController.text.trim();
+    setState(() => _busy = true);
+    try {
+      final service = AuthService();
+      if (reset) {
+        await service.resetPassword(email);
+        if (mounted) {
+          _showMessage(
+            'If an account exists for this email, a reset link will be sent.',
+          );
+        }
+      } else {
+        await service.loginUser(
+          email: email,
+          password: _passwordController.text,
+          rememberMe: _rememberMe,
+        );
+      }
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+      _showMessage(switch (error.code) {
+        'network-request-failed' =>
+          'Check your internet connection and try again.',
+        'too-many-requests' => 'Too many attempts. Please try again later.',
+        _ =>
+          reset
+              ? 'Unable to request a password reset. Please try again.'
+              : 'Unable to log in. Check your email and password.',
+      });
+    } catch (_) {
+      if (mounted) _showMessage('Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   InputDecoration _inputDecoration(
@@ -127,6 +175,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 8),
 
                     TextFormField(
+                      key: _emailFieldKey,
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       decoration: _inputDecoration(
@@ -190,29 +239,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     Row(
                       children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _rememberMe,
-                            activeColor: navy,
-                            onChanged: (value) {
-                              setState(() {
-                                _rememberMe = value ?? false;
-                              });
-                            },
+                        if (kIsWeb) ...[
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                              value: _rememberMe,
+                              activeColor: navy,
+                              onChanged: (value) {
+                                setState(() {
+                                  _rememberMe = value ?? false;
+                                });
+                              },
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Remember me',
-                          style: TextStyle(color: muted, fontSize: 12),
-                        ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Remember me',
+                            style: TextStyle(color: muted, fontSize: 12),
+                          ),
+                        ],
                         const Spacer(),
                         TextButton(
-                          onPressed: () {
-                            _showMessage('Password reset coming soon');
-                          },
+                          onPressed: _busy ? null : () => _submit(reset: true),
                           child: const Text(
                             'Forgot password?',
                             style: TextStyle(
@@ -239,25 +288,23 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            _showMessage('Firebase login not connected yet');
-                          }
-                        },
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.chevron_right),
-                            SizedBox(width: 6),
-                            Text(
-                              'Log in',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                        onPressed: _busy ? null : () => _submit(reset: false),
+                        child: _busy
+                            ? const CircularProgressIndicator()
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.chevron_right),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Log in',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
 
@@ -271,14 +318,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(color: muted, fontSize: 13),
                         ),
                         TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const RegisterScreen(),
-                              ),
-                            );
-                          },
+                          onPressed: _busy
+                              ? null
+                              : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const RegisterScreen(),
+                                    ),
+                                  );
+                                },
                           child: const Text(
                             'Register',
                             style: TextStyle(
