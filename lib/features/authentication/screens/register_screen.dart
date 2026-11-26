@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -72,82 +73,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  
-Future<void> _register() async {
-  if (_isLoading || !_formKey.currentState!.validate()) {
-    return;
-  }
+  Future<void> _register() async {
+    if (_isLoading || !_formKey.currentState!.validate()) {
+      return;
+    }
 
-  setState(() {
-    _isLoading = true;
-  });
+    setState(() {
+      _isLoading = true;
+    });
 
-  try {
-    await _authService.registerUser(
-      fullName: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-      phoneNumber: _phoneController.text.trim(),
-    );
+    try {
+      await _authService.registerUser(
+        fullName: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        phoneNumber: _phoneController.text.trim(),
+      );
 
-    await _authService.logoutUser();
+      await _authService.logoutUser();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Account created successfully. Please log in.',
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account created successfully. Please log in.'),
+          backgroundColor: Colors.green,
         ),
-        backgroundColor: Colors.green,
-      ),
-    );
+      );
 
-    Navigator.pop(context);
-  } on FirebaseAuthException catch (e) {
-    if (!mounted) return;
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
 
-    String message = 'Registration failed. Please try again.';
+      String message = 'Registration failed. Please try again.';
 
-    switch (e.code) {
-      case 'email-already-in-use':
-        message = 'This email is already registered.';
-        break;
-      case 'weak-password':
-        message = 'Please use a stronger password.';
-        break;
-      case 'invalid-email':
-        message = 'Please enter a valid email address.';
-        break;
-      case 'network-request-failed':
-        message = 'Please check your internet connection.';
-        break;
-    }
+      switch (e.code) {
+        case 'email-already-in-use':
+          message = 'This email is already registered.';
+          break;
+        case 'weak-password':
+          message = 'Please use a stronger password.';
+          break;
+        case 'invalid-email':
+          message = 'Please enter a valid email address.';
+          break;
+        case 'network-request-failed':
+          message = 'Please check your internet connection.';
+          break;
+      }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Registration failed. Please try again.'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  } finally {
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration failed. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +160,9 @@ Future<void> _register() async {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextButton.icon(
-                  onPressed: _isLoading ? null : () => Navigator.maybePop(context),
+                  onPressed: _isLoading
+                      ? null
+                      : () => Navigator.maybePop(context),
                   icon: const Icon(Icons.arrow_back_ios, size: 16),
                   label: const Text('Back'),
                   style: TextButton.styleFrom(
@@ -406,7 +402,9 @@ Future<void> _register() async {
                       style: TextStyle(color: muted),
                     ),
                     TextButton(
-                      onPressed: _isLoading ? null : () => Navigator.maybePop(context),
+                      onPressed: _isLoading
+                          ? null
+                          : () => Navigator.maybePop(context),
                       child: const Text(
                         'Log in',
                         style: TextStyle(

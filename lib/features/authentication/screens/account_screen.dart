@@ -23,8 +23,10 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _signOut() async {
     setState(() => _signingOut = true);
+    var signedOut = false;
     try {
       await _service.logoutUser();
+      signedOut = true;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -32,7 +34,10 @@ class _AccountScreenState extends State<AccountScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _signingOut = false);
+      if (mounted) {
+        setState(() => _signingOut = false);
+        if (signedOut) Navigator.of(context).maybePop();
+      }
     }
   }
 
