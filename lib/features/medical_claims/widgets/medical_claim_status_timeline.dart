@@ -1,72 +1,96 @@
 import 'package:flutter/material.dart';
 
 import '../models/medical_claim_status.dart';
+import 'medical_status_badge.dart';
 
 class MedicalClaimStatusTimeline extends StatelessWidget {
-  const MedicalClaimStatusTimeline({super.key, required this.status});
+  const MedicalClaimStatusTimeline({
+    super.key,
+    required this.status,
+    this.submittedAt,
+    this.inline = false,
+  });
 
   final MedicalClaimStatus status;
+  final DateTime? submittedAt;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final steps = _buildSteps(status, submittedAt);
 
-    final steps = _buildSteps(status);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Claim Progress',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!inline) ...[
+          const Text(
+            'Claim Progress',
+            style: TextStyle(
+              color: MedicalClaimsColors.navy,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 16),
-            for (var i = 0; i < steps.length; i++)
-              _TimelineRow(
-                step: steps[i],
-                isLast: i == steps.length - 1,
-                colors: colors,
-              ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 14),
+        ],
+        for (var i = 0; i < steps.length; i++)
+          _TimelineRow(
+            step: steps[i],
+            isLast: i == steps.length - 1,
+          ),
+      ],
+    );
+
+    if (inline) {
+      return content;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: MedicalClaimsColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MedicalClaimsColors.border),
       ),
+      child: content,
     );
   }
 
-  List<_TimelineStep> _buildSteps(MedicalClaimStatus current) {
-    final isSubmittedDone = current != MedicalClaimStatus.submitted;
+  List<_TimelineStep> _buildSteps(
+    MedicalClaimStatus current,
+    DateTime? createdAt,
+  ) {
+    final submittedPrefix = createdAt != null
+        ? '${formatFigmaDate(createdAt, includeYear: false)} · '
+        : '';
+
+    final isSubmittedCompleted = current != MedicalClaimStatus.submitted;
     final isReviewActive =
         current == MedicalClaimStatus.underReview ||
         current == MedicalClaimStatus.moreInfoRequired;
-    final isReviewDone =
+    final isReviewCompleted =
         current == MedicalClaimStatus.approved ||
         current == MedicalClaimStatus.rejected;
 
     final decisionStep = switch (current) {
       MedicalClaimStatus.approved => const _TimelineStep(
         title: 'Approved',
-        subtitle: 'Your medical claim has been approved for settlement.',
+        subtitle: 'Your medical claim has been approved for settlement',
         state: _StepState.completed,
       ),
       MedicalClaimStatus.rejected => const _TimelineStep(
         title: 'Rejected',
-        subtitle: 'This claim could not be approved under policy terms.',
+        subtitle: 'Not covered under your medical policy terms',
         state: _StepState.error,
       ),
       MedicalClaimStatus.moreInfoRequired => const _TimelineStep(
         title: 'More info required',
-        subtitle: 'Operations requested additional supporting medical documents.',
+        subtitle: 'Additional medical bills or reports requested',
         state: _StepState.warning,
       ),
       _ => const _TimelineStep(
-        title: 'Final decision',
-        subtitle: 'Pending claims team approval and payout sanction.',
+        title: 'Decision',
+        subtitle: 'We\'ll notify you when it\'s ready',
         state: _StepState.upcoming,
       ),
     };
@@ -74,13 +98,19 @@ class MedicalClaimStatusTimeline extends StatelessWidget {
     return [
       _TimelineStep(
         title: 'Submitted',
-        subtitle: 'Medical claim and bill details received.',
-        state: isSubmittedDone ? _StepState.completed : _StepState.active,
+        subtitle: '${submittedPrefix}We received your claim',
+        state: isSubmittedCompleted
+            ? _StepState.completed
+            : _StepState.completed,
       ),
       _TimelineStep(
         title: 'Under review',
-        subtitle: 'Claims operations team is verifying hospital & bill records.',
-        state: isReviewDone
+        subtitle: isReviewCompleted
+            ? 'Verification completed by operations'
+            : (isReviewActive
+                  ? 'Our team is reviewing'
+                  : 'Review will begin shortly'),
+        state: isReviewCompleted
             ? _StepState.completed
             : (isReviewActive ? _StepState.active : _StepState.upcoming),
       ),
@@ -104,44 +134,43 @@ class _TimelineStep {
 }
 
 class _TimelineRow extends StatelessWidget {
-  const _TimelineRow({
-    required this.step,
-    required this.isLast,
-    required this.colors,
-  });
+  const _TimelineRow({required this.step, required this.isLast});
 
   final _TimelineStep step;
   final bool isLast;
-  final ColorScheme colors;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final (dotBg, dotFg, icon) = switch (step.state) {
+    final (circleBg, iconColor, titleColor, icon) = switch (step.state) {
       _StepState.completed => (
-        colors.primary,
-        colors.onPrimary,
-        Icons.check,
+        MedicalClaimsColors.successBg,
+        MedicalClaimsColors.successFg,
+        MedicalClaimsColors.successFg,
+        Icons.check_rounded,
       ),
       _StepState.active => (
-        colors.secondaryContainer,
-        colors.onSecondaryContainer,
-        Icons.hourglass_top_rounded,
+        MedicalClaimsColors.softBlue,
+        MedicalClaimsColors.accentBlue,
+        MedicalClaimsColors.accentBlue,
+        Icons.access_time_rounded,
       ),
       _StepState.warning => (
-        colors.tertiaryContainer,
-        colors.onTertiaryContainer,
+        MedicalClaimsColors.infoReqBg,
+        MedicalClaimsColors.infoReqFg,
+        MedicalClaimsColors.infoReqFg,
         Icons.priority_high_rounded,
       ),
       _StepState.error => (
-        colors.error,
-        colors.onError,
+        MedicalClaimsColors.rejectedBg,
+        MedicalClaimsColors.rejectedFg,
+        MedicalClaimsColors.rejectedFg,
         Icons.close_rounded,
       ),
       _StepState.upcoming => (
-        colors.surfaceContainerHighest,
-        colors.onSurfaceVariant,
-        Icons.circle_outlined,
+        const Color(0xFFF1F5F9),
+        MedicalClaimsColors.textSecondary,
+        MedicalClaimsColors.textSecondary,
+        Icons.info_outline_rounded,
       ),
     };
 
@@ -155,19 +184,19 @@ class _TimelineRow extends StatelessWidget {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: dotBg,
+                  color: circleBg,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 16, color: dotFg),
+                child: Icon(icon, size: 15, color: iconColor),
               ),
               if (!isLast)
                 Expanded(
                   child: Container(
-                    width: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    width: 1.5,
+                    margin: const EdgeInsets.symmetric(vertical: 3),
                     color: step.state == _StepState.completed
-                        ? colors.primary
-                        : colors.outlineVariant,
+                        ? MedicalClaimsColors.successBg
+                        : MedicalClaimsColors.border,
                   ),
                 ),
             ],
@@ -175,24 +204,24 @@ class _TimelineRow extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     step.title,
-                    style: theme.textTheme.titleSmall?.copyWith(
+                    style: TextStyle(
+                      color: titleColor,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: step.state == _StepState.upcoming
-                          ? colors.onSurfaceVariant
-                          : colors.onSurface,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Text(
                     step.subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
+                    style: const TextStyle(
+                      color: MedicalClaimsColors.textSecondary,
+                      fontSize: 12,
                     ),
                   ),
                 ],

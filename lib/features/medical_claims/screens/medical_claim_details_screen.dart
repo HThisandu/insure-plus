@@ -1,6 +1,5 @@
-import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/medical_bill_document.dart';
@@ -21,65 +20,117 @@ class MedicalClaimDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dates = MaterialLocalizations.of(context);
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Medical Claim Details')),
-      body: SafeArea(
-        child: ListenableBuilder(
-          listenable: service,
-          builder: (context, _) {
-            final claim = service.findClaim(claimId);
-            if (claim == null) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.search_off_outlined,
-                        size: 48,
-                        color: colors.onSurfaceVariant,
+    return Theme(
+      data: buildMedicalClaimsFigmaTheme(context),
+      child: Scaffold(
+        backgroundColor: MedicalClaimsColors.canvas,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.chevron_left_rounded, size: 28),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          titleSpacing: 0,
+          title: const Text('Medical Claim Details'),
+        ),
+        body: SafeArea(
+          child: ListenableBuilder(
+            listenable: service,
+            builder: (context, _) {
+              final claim = service.findClaim(claimId);
+              if (claim == null) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Medical claim not found.',
+                      style: TextStyle(
+                        color: MedicalClaimsColors.navy,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Medical claim not found.',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            }
+                );
+              }
 
-            return Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Card(
-                      color: colors.primaryContainer,
-                      child: Padding(
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                    children: [
+                      // Dark Navy Hero Card (matching Figma 2-27 style)
+                      Container(
                         padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: MedicalClaimsColors.navy,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.favorite_border_rounded,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        claim.hospitalName,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${claim.treatmentType} · Policy ${claim.policyId}',
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.75,
+                                          ),
+                                          fontSize: 12.5,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
                             Wrap(
-                              spacing: 12,
+                              spacing: 10,
                               runSpacing: 8,
-                              crossAxisAlignment: WrapCrossAlignment.center,
                               alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
                                   claim.claimId,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: colors.onPrimaryContainer,
-                                    fontWeight: FontWeight.w600,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                                 MedicalStatusBadge(status: claim.status),
@@ -88,229 +139,183 @@ class MedicalClaimDetailsScreen extends StatelessWidget {
                             const SizedBox(height: 12),
                             Text(
                               formatLkr(claim.claimAmount),
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                color: colors.onPrimaryContainer,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Submitted ${formatFigmaDate(claim.createdAt)}',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.72),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (claim.status ==
+                          MedicalClaimStatus.moreInfoRequired) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: MedicalClaimsColors.infoReqBg,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.info_outline_rounded,
+                                color: MedicalClaimsColors.infoReqFg,
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Operations requested additional supporting medical bills or discharge reports.',
+                                  style: TextStyle(
+                                    color: MedicalClaimsColors.infoReqFg,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      MedicalClaimStatusTimeline(
+                        status: claim.status,
+                        submittedAt: claim.createdAt,
+                      ),
+                      const SizedBox(height: 14),
+                      _FigmaInfoCard(
+                        title: 'Patient & Hospital Information',
+                        rows: [
+                          _KeyValueRow('Patient name', claim.patientName),
+                          _KeyValueRow('Relationship', claim.patientRelationship),
+                          _KeyValueRow('Hospital', claim.hospitalName),
+                          _KeyValueRow('Treatment type', claim.treatmentType),
+                          if (claim.admissionDate != null)
+                            _KeyValueRow(
+                              'Admission / Visit date',
+                              formatFigmaDate(claim.admissionDate!),
+                            ),
+                          if (claim.dischargeDate != null)
+                            _KeyValueRow(
+                              'Discharge date',
+                              formatFigmaDate(claim.dischargeDate!),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      _FigmaInfoCard(
+                        title: 'Billing & Claim Summary',
+                        rows: [
+                          _KeyValueRow('Policy ID', claim.policyId),
+                          if (claim.billNumber != null &&
+                              claim.billNumber!.isNotEmpty)
+                            _KeyValueRow('Bill number', claim.billNumber!),
+                          if (claim.billDate != null)
+                            _KeyValueRow(
+                              'Bill date',
+                              formatFigmaDate(claim.billDate!),
+                            ),
+                          _KeyValueRow('What happened', claim.description),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: MedicalClaimsColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Supporting documents (${claim.documents.length})',
+                              style: const TextStyle(
+                                color: MedicalClaimsColors.navy,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Policy ${claim.policyId} · Submitted ${dates.formatMediumDate(claim.createdAt.toLocal())}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colors.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (claim.status == MedicalClaimStatus.moreInfoRequired) ...[
-                      const SizedBox(height: 12),
-                      Card(
-                        color: colors.tertiaryContainer,
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.info_outline,
-                            color: colors.onTertiaryContainer,
-                          ),
-                          title: Text(
-                            'Additional documents requested',
-                            style: TextStyle(
-                              color: colors.onTertiaryContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'Please contact hospital coordination or submit updated bills requested by claims operations.',
-                            style: TextStyle(color: colors.onTertiaryContainer),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    MedicalClaimStatusTimeline(status: claim.status),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Patient & Hospital Information',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            _DetailRow(
-                              icon: Icons.person_outline,
-                              label: 'Patient name',
-                              value: claim.patientName,
-                            ),
-                            _DetailRow(
-                              icon: Icons.family_restroom_outlined,
-                              label: 'Relationship',
-                              value: claim.patientRelationship,
-                            ),
-                            _DetailRow(
-                              icon: Icons.local_hospital_outlined,
-                              label: 'Hospital',
-                              value: claim.hospitalName,
-                            ),
-                            _DetailRow(
-                              icon: Icons.medical_services_outlined,
-                              label: 'Treatment type',
-                              value: claim.treatmentType,
-                            ),
-                            if (claim.admissionDate != null)
-                              _DetailRow(
-                                icon: Icons.login_outlined,
-                                label: 'Admission date',
-                                value: dates.formatMediumDate(
-                                  claim.admissionDate!.toLocal(),
-                                ),
-                              ),
-                            if (claim.dischargeDate != null)
-                              _DetailRow(
-                                icon: Icons.logout_outlined,
-                                label: 'Discharge date',
-                                value: dates.formatMediumDate(
-                                  claim.dischargeDate!.toLocal(),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Billing & Treatment Summary',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            if (claim.billNumber != null &&
-                                claim.billNumber!.isNotEmpty)
-                              _DetailRow(
-                                icon: Icons.receipt_outlined,
-                                label: 'Bill number',
-                                value: claim.billNumber!,
-                              ),
-                            if (claim.billDate != null)
-                              _DetailRow(
-                                icon: Icons.event_outlined,
-                                label: 'Bill date',
-                                value: dates.formatMediumDate(
-                                  claim.billDate!.toLocal(),
-                                ),
-                              ),
-                            _DetailRow(
-                              icon: Icons.notes_outlined,
-                              label: 'Description',
-                              value: claim.description,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Attached Medical Bills (${claim.documents.length})',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             if (claim.documents.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                child: Text(
-                                  'No medical bill documents attached.',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colors.onSurfaceVariant,
-                                  ),
+                              const Text(
+                                'No supporting documents attached.',
+                                style: TextStyle(
+                                  color: MedicalClaimsColors.textSecondary,
+                                  fontSize: 13,
                                 ),
                               )
                             else
-                              for (final document in claim.documents)
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: CircleAvatar(
-                                    backgroundColor:
-                                        colors.surfaceContainerHighest,
-                                    child: const Icon(
-                                      Icons.description_outlined,
+                              for (final doc in claim.documents)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _StoredDocumentTile(
+                                    document: doc,
+                                    onView: () => _openDocumentPreview(
+                                      context,
+                                      doc,
                                     ),
                                   ),
-                                  title: Text(
-                                    document.fileName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  subtitle: Text(
-                                    '${document.documentType} · ${dates.formatMediumDate(document.uploadedAt.toLocal())}',
-                                  ),
-                                  trailing: _canPreviewDocument(document)
-                                      ? IconButton(
-                                          tooltip: 'Preview bill',
-                                          icon: const Icon(
-                                            Icons.visibility_outlined,
-                                          ),
-                                          onPressed: () =>
-                                              _showDocumentPreview(
-                                                context,
-                                                document,
-                                              ),
-                                        )
-                                      : null,
                                 ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  bool _canPreviewDocument(MedicalBillDocument document) {
-    final url = document.downloadUrl?.trim();
-    if (url == null || url.isEmpty) return false;
-    if (url.startsWith('http://') || url.startsWith('https://')) return true;
-    return !kIsWeb && File(url).existsSync();
-  }
-
-  void _showDocumentPreview(
+  Future<void> _openDocumentPreview(
     BuildContext context,
     MedicalBillDocument document,
+  ) async {
+    final bytes = await service.downloadClaimDocument(document);
+    if (!context.mounted) return;
+
+    if (bytes == null || bytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Document "${document.fileName}" stored in Supabase bucket claim-documents (${document.storagePath}).',
+          ),
+        ),
+      );
+      return;
+    }
+
+    _showBytesDialog(context, document, bytes);
+  }
+
+  void _showBytesDialog(
+    BuildContext context,
+    MedicalBillDocument document,
+    Uint8List bytes,
   ) {
-    final url = document.downloadUrl?.trim();
-    if (url == null || url.isEmpty) return;
-    final isNetwork = url.startsWith('http://') || url.startsWith('https://');
+    final isPdf = document.fileName.toLowerCase().endsWith('.pdf');
 
     showDialog<void>(
       context: context,
       builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.white,
         clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
           child: Column(
@@ -318,37 +323,37 @@ class MedicalClaimDetailsScreen extends StatelessWidget {
             children: [
               AppBar(
                 automaticallyImplyLeading: false,
+                backgroundColor: Colors.white,
                 title: Text(
                   document.fileName,
+                  style: const TextStyle(fontSize: 15),
                   overflow: TextOverflow.ellipsis,
                 ),
                 actions: [
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded),
                     onPressed: () => Navigator.of(dialogContext).pop(),
                   ),
                 ],
               ),
               Flexible(
-                child: InteractiveViewer(
-                  child: isNetwork
-                      ? Image.network(
-                          url,
+                child: isPdf
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Downloaded PDF (${(bytes.length / 1024).toStringAsFixed(1)} KB) from private bucket claim-documents.',
+                        ),
+                      )
+                    : InteractiveViewer(
+                        child: Image.memory(
+                          bytes,
                           fit: BoxFit.contain,
                           errorBuilder: (_, _, _) => const Padding(
                             padding: EdgeInsets.all(24),
-                            child: Text('Unable to load bill preview.'),
-                          ),
-                        )
-                      : Image.file(
-                          File(url),
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => const Padding(
-                            padding: EdgeInsets.all(24),
-                            child: Text('Unable to load local bill preview.'),
+                            child: Text('Unable to render image preview.'),
                           ),
                         ),
-                ),
+                      ),
               ),
             ],
           ),
@@ -358,43 +363,141 @@ class MedicalClaimDetailsScreen extends StatelessWidget {
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+class _FigmaInfoCard extends StatelessWidget {
+  const _FigmaInfoCard({required this.title, required this.rows});
 
-  final IconData icon;
+  final String title;
+  final List<_KeyValueRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MedicalClaimsColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: MedicalClaimsColors.navy,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0)
+              const Divider(height: 18, color: MedicalClaimsColors.border),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _KeyValueRow extends StatelessWidget {
+  const _KeyValueRow(this.label, this.value);
+
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: MedicalClaimsColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 3,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: MedicalClaimsColors.textPrimary,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+class _StoredDocumentTile extends StatelessWidget {
+  const _StoredDocumentTile({
+    required this.document,
+    required this.onView,
+  });
+
+  final MedicalBillDocument document;
+  final VoidCallback onView;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: MedicalClaimsColors.softBlue,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: MedicalClaimsColors.softBlueBorder),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: colors.primary),
+          const Icon(
+            Icons.description_outlined,
+            color: MedicalClaimsColors.navy,
+            size: 22,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
+                  document.fileName,
+                  style: const TextStyle(
+                    color: MedicalClaimsColors.navy,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Text(value, style: theme.textTheme.bodyLarge),
+                Text(
+                  '${document.documentType} · ${formatFigmaDate(document.uploadedAt)}',
+                  style: const TextStyle(
+                    color: MedicalClaimsColors.textSecondary,
+                    fontSize: 11.5,
+                  ),
+                ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'View / Download from Supabase',
+            icon: const Icon(
+              Icons.download_for_offline_outlined,
+              color: MedicalClaimsColors.accentBlue,
+            ),
+            onPressed: onView,
           ),
         ],
       ),

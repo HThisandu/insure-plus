@@ -4,6 +4,7 @@ import 'models/ocr_bill_data.dart';
 import 'screens/medical_claims_home_screen.dart';
 import 'services/medical_claim_repository.dart';
 import 'services/medical_claim_service.dart';
+import 'widgets/medical_status_badge.dart';
 
 void main() => runApp(const MedicalClaimsPreview());
 
@@ -29,9 +30,6 @@ class _MedicalClaimsPreviewState extends State<MedicalClaimsPreview> {
     super.dispose();
   }
 
-  /// Demonstrates the Member 06 Google ML Kit OCR handoff contract during
-  /// standalone preview. Member 01 replaces this callback with Member 06's
-  /// live OCR scanner screen during integration.
   Future<OcrBillData?> _previewOcrHandoff(BuildContext context) async {
     return showDialog<OcrBillData>(
       context: context,
@@ -66,11 +64,14 @@ class _MedicalClaimsPreviewState extends State<MedicalClaimsPreview> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Insure-Plus · Medical Claims Preview',
+      title: 'InsureCare · Medical Claims',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF175E59)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: MedicalClaimsColors.navy,
+          primary: MedicalClaimsColors.navy,
+        ),
       ),
       home: MedicalClaimsHomeScreen(
         service: _service,

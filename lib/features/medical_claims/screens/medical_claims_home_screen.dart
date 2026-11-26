@@ -27,6 +27,7 @@ class MedicalClaimsHomeScreen extends StatefulWidget {
 
 class _MedicalClaimsHomeScreenState extends State<MedicalClaimsHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
+  bool _showSearch = false;
 
   @override
   void dispose() {
@@ -50,7 +51,7 @@ class _MedicalClaimsHomeScreenState extends State<MedicalClaimsHomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Medical claim ${created.claimId} added to your claims list.',
+          'Medical claim ${created.claimId} submitted successfully.',
         ),
         action: SnackBarAction(
           label: 'View',
@@ -73,254 +74,310 @@ class _MedicalClaimsHomeScreenState extends State<MedicalClaimsHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    return Theme(
+      data: buildMedicalClaimsFigmaTheme(context),
+      child: Builder(
+        builder: (themedContext) {
+          return Scaffold(
+            backgroundColor: MedicalClaimsColors.canvas,
+            body: SafeArea(
+              child: ListenableBuilder(
+                listenable: widget.service,
+                builder: (context, _) {
+                  final claims = widget.service.filteredClaims;
+                  final totalCount = widget.service.claims.length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Medical Claims'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh claims',
-            icon: const Icon(Icons.refresh),
-            onPressed: () => widget.service.refresh(),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openSubmitForm,
-        icon: const Icon(Icons.add),
-        label: const Text('New Claim'),
-      ),
-      body: SafeArea(
-        child: ListenableBuilder(
-          listenable: widget.service,
-          builder: (context, _) {
-            final claims = widget.service.filteredClaims;
-            final allCount = widget.service.claims.length;
+                  if (widget.service.isLoading && totalCount == 0) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            if (widget.service.isLoading && allCount == 0) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            return RefreshIndicator(
-              onRefresh: widget.service.refresh,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                    children: [
-                      _SummaryCard(service: widget.service),
-                      const SizedBox(height: 16),
-                      if (widget.service.errorMessage != null) ...[
-                        Card(
-                          color: colors.errorContainer,
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.error_outline,
-                              color: colors.onErrorContainer,
-                            ),
-                            title: Text(
-                              widget.service.errorMessage!,
-                              style: TextStyle(color: colors.onErrorContainer),
-                            ),
-                            trailing: TextButton(
-                              onPressed: widget.service.refresh,
-                              child: const Text('Retry'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      TextField(
-                        controller: _searchController,
-                        onChanged: widget.service.setSearchQuery,
-                        decoration: InputDecoration(
-                          hintText: 'Search hospital, patient, or claim ID',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: widget.service.searchQuery.isNotEmpty
-                              ? IconButton(
-                                  tooltip: 'Clear search',
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    widget.service.setSearchQuery('');
-                                  },
-                                )
-                              : null,
-                          border: const OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                  return RefreshIndicator(
+                    onRefresh: widget.service.refresh,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 680),
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text('All ($allCount)'),
-                                selected:
-                                    widget.service.selectedStatusFilter == null,
-                                onSelected: (_) =>
-                                    widget.service.setStatusFilter(null),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Your claims, in view.',
+                                        style: TextStyle(
+                                          color: MedicalClaimsColors.navy,
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.3,
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Follow every update, from start to resolution.',
+                                        style: TextStyle(
+                                          color:
+                                              MedicalClaimsColors.textSecondary,
+                                          fontSize: 13.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: _showSearch
+                                      ? 'Hide search'
+                                      : 'Search claims',
+                                  onPressed: () {
+                                    setState(() {
+                                      _showSearch = !_showSearch;
+                                      if (!_showSearch) {
+                                        _searchController.clear();
+                                        widget.service.setSearchQuery('');
+                                      }
+                                    });
+                                  },
+                                  icon: Icon(
+                                    _showSearch
+                                        ? Icons.search_off_rounded
+                                        : Icons.search_rounded,
+                                    color: MedicalClaimsColors.navy,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Refresh claims',
+                                  onPressed: widget.service.refresh,
+                                  icon: const Icon(
+                                    Icons.refresh_rounded,
+                                    color: MedicalClaimsColors.navy,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              onPressed: _openSubmitForm,
+                              icon: const Icon(Icons.add_rounded, size: 20),
+                              label: const Text('Submit a new claim'),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
                               ),
                             ),
-                            for (final status in MedicalClaimStatus.values)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  label: Text(
-                                    '${status.label} (${widget.service.countByStatus(status)})',
+                            if (_showSearch) ...[
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _searchController,
+                                onChanged: widget.service.setSearchQuery,
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'Search hospital, patient, or claim ID',
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    size: 20,
                                   ),
-                                  selected:
-                                      widget.service.selectedStatusFilter ==
-                                      status,
-                                  onSelected: (selected) =>
-                                      widget.service.setStatusFilter(
-                                        selected ? status : null,
-                                      ),
+                                  suffixIcon:
+                                      widget.service.searchQuery.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(
+                                            Icons.clear_rounded,
+                                            size: 18,
+                                          ),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            widget.service.setSearchQuery('');
+                                          },
+                                        )
+                                      : null,
                                 ),
                               ),
+                            ],
+                            const SizedBox(height: 14),
+                            _FilterPillsBar(service: widget.service),
+                            const SizedBox(height: 16),
+                            if (widget.service.errorMessage != null) ...[
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: MedicalClaimsColors.rejectedBg,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.error_outline_rounded,
+                                      color: MedicalClaimsColors.rejectedFg,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        widget.service.errorMessage!,
+                                        style: const TextStyle(
+                                          color: MedicalClaimsColors.rejectedFg,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: widget.service.refresh,
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                            if (claims.isEmpty)
+                              _EmptyClaimsCard(
+                                hasFilters:
+                                    widget.service.selectedStatusFilter !=
+                                        null ||
+                                    widget.service.viewFilter !=
+                                        MedicalClaimsViewFilter.all ||
+                                    widget.service.searchQuery
+                                        .trim()
+                                        .isNotEmpty,
+                                onClearFilters: () {
+                                  _searchController.clear();
+                                  widget.service.setSearchQuery('');
+                                  widget.service.setStatusFilter(null);
+                                  widget.service.setViewFilter(
+                                    MedicalClaimsViewFilter.all,
+                                  );
+                                },
+                                onSubmitNew: _openSubmitForm,
+                              )
+                            else
+                              for (var i = 0; i < claims.length; i++)
+                                MedicalClaimCard(
+                                  claim: claims[i],
+                                  featured:
+                                      i == 0 &&
+                                      MedicalClaimService.isInProgressStatus(
+                                        claims[i].status,
+                                      ),
+                                  onTap: () =>
+                                      _openClaimDetails(claims[i].claimId),
+                                ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      if (claims.isEmpty)
-                        _EmptyClaimsState(
-                          hasFilters:
-                              widget.service.selectedStatusFilter != null ||
-                              widget.service.searchQuery.trim().isNotEmpty,
-                          onClearFilters: () {
-                            _searchController.clear();
-                            widget.service.setSearchQuery('');
-                            widget.service.setStatusFilter(null);
-                          },
-                          onSubmitNew: _openSubmitForm,
-                        )
-                      else
-                        for (final claim in claims)
-                          MedicalClaimCard(
-                            claim: claim,
-                            onTap: () => _openClaimDetails(claim.claimId),
-                          ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.service});
+class _FilterPillsBar extends StatelessWidget {
+  const _FilterPillsBar({required this.service});
 
   final MedicalClaimService service;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final isAllSelected =
+        service.selectedStatusFilter == null &&
+        service.viewFilter == MedicalClaimsViewFilter.all;
+    final isInProgressSelected =
+        service.selectedStatusFilter == null &&
+        service.viewFilter == MedicalClaimsViewFilter.inProgress;
+    final isClosedSelected =
+        service.selectedStatusFilter == null &&
+        service.viewFilter == MedicalClaimsViewFilter.closed;
 
-    return Card(
-      color: colors.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.health_and_safety_outlined,
-                  color: colors.onPrimaryContainer,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Medical Claims Overview',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: colors.onPrimaryContainer,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _FigmaFilterPill(
+            label: 'All claims (${service.claims.length})',
+            selected: isAllSelected,
+            onTap: () => service.setViewFilter(MedicalClaimsViewFilter.all),
+          ),
+          _FigmaFilterPill(
+            label: 'In progress (${service.inProgressCount})',
+            selected: isInProgressSelected,
+            onTap: () =>
+                service.setViewFilter(MedicalClaimsViewFilter.inProgress),
+          ),
+          _FigmaFilterPill(
+            label: 'Closed (${service.closedCount})',
+            selected: isClosedSelected,
+            onTap: () => service.setViewFilter(MedicalClaimsViewFilter.closed),
+          ),
+          for (final status in MedicalClaimStatus.values)
+            _FigmaFilterPill(
+              label: '${status.label} (${service.countByStatus(status)})',
+              selected: service.selectedStatusFilter == status,
+              onTap: () => service.setStatusFilter(
+                service.selectedStatusFilter == status ? null : status,
+              ),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 24,
-              runSpacing: 12,
-              children: [
-                _SummaryMetric(
-                  label: 'Total Claims',
-                  value: '${service.claims.length}',
-                  color: colors.onPrimaryContainer,
-                ),
-                _SummaryMetric(
-                  label: 'Total Claimed',
-                  value: formatLkr(service.totalClaimedAmount),
-                  color: colors.onPrimaryContainer,
-                ),
-                _SummaryMetric(
-                  label: 'Approved',
-                  value: formatLkr(service.approvedAmount),
-                  color: colors.onPrimaryContainer,
-                ),
-              ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FigmaFilterPill extends StatelessWidget {
+  const _FigmaFilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: selected ? MedicalClaimsColors.navy : Colors.white,
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: selected
+                ? MedicalClaimsColors.navy
+                : MedicalClaimsColors.border,
+          ),
+        ),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected
+                    ? Colors.white
+                    : MedicalClaimsColors.textPrimary,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SummaryMetric extends StatelessWidget {
-  const _SummaryMetric({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: color.withValues(alpha: 0.8),
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmptyClaimsState extends StatelessWidget {
-  const _EmptyClaimsState({
+class _EmptyClaimsCard extends StatelessWidget {
+  const _EmptyClaimsCard({
     required this.hasFilters,
     required this.onClearFilters,
     required this.onSubmitNew,
@@ -332,53 +389,58 @@ class _EmptyClaimsState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(
-              hasFilters
-                  ? Icons.filter_list_off_outlined
-                  : Icons.medical_information_outlined,
-              size: 48,
-              color: colors.onSurfaceVariant,
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MedicalClaimsColors.border),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            hasFilters
+                ? Icons.filter_list_off_rounded
+                : Icons.medical_information_outlined,
+            size: 44,
+            color: MedicalClaimsColors.textSecondary,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            hasFilters
+                ? 'No matching medical claims'
+                : 'No medical claims submitted yet',
+            style: const TextStyle(
+              color: MedicalClaimsColors.navy,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 12),
-            Text(
-              hasFilters
-                  ? 'No matching medical claims'
-                  : 'No medical claims submitted yet',
-              style: theme.textTheme.titleMedium,
-              textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasFilters
+                ? 'Try switching status filters or clearing your search.'
+                : 'Submit your hospital bill or medical report to start tracking reimbursement.',
+            style: const TextStyle(
+              color: MedicalClaimsColors.textSecondary,
+              fontSize: 13,
             ),
-            const SizedBox(height: 6),
-            Text(
-              hasFilters
-                  ? 'Try adjusting your status filter or search query.'
-                  : 'Submit a new medical claim to track reimbursement progress.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          if (hasFilters)
+            OutlinedButton(
+              onPressed: onClearFilters,
+              child: const Text('Clear filters'),
+            )
+          else
+            FilledButton.icon(
+              onPressed: onSubmitNew,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Submit a new claim'),
             ),
-            const SizedBox(height: 16),
-            if (hasFilters)
-              OutlinedButton(
-                onPressed: onClearFilters,
-                child: const Text('Clear filters'),
-              )
-            else
-              FilledButton.icon(
-                onPressed: onSubmitNew,
-                icon: const Icon(Icons.add),
-                label: const Text('Submit Medical Claim'),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
