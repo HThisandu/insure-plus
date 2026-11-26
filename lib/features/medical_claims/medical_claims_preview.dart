@@ -30,13 +30,13 @@ class _MedicalClaimsPreviewState extends State<MedicalClaimsPreview> {
     super.dispose();
   }
 
-  Future<OcrBillData?> _previewOcrHandoff(BuildContext context) async {
+  Future<OcrBillData?> _sampleOcrScan(BuildContext context) async {
     return showDialog<OcrBillData>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('AI Bill OCR Preview'),
+        title: const Text('Sample Bill OCR'),
         content: const Text(
-          'Simulate receiving verified bill fields from Member 06\'s Google ML Kit OCR module?',
+          'Fill the form using sample scanned medical bill details?',
         ),
         actions: [
           TextButton(
@@ -50,11 +50,9 @@ class _MedicalClaimsPreviewState extends State<MedicalClaimsPreview> {
                 billNumber: 'DRD-2026-55018',
                 billDate: DateTime(2026, 11, 21),
                 amount: 16800.00,
-                rawText:
-                    'DURDANS HOSPITAL\nINV: DRD-2026-55018\nTOTAL: LKR 16,800.00',
               ),
             ),
-            child: const Text('Apply Sample OCR'),
+            child: const Text('Apply'),
           ),
         ],
       ),
@@ -64,7 +62,7 @@ class _MedicalClaimsPreviewState extends State<MedicalClaimsPreview> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'InsureCare · Medical Claims',
+      title: 'Insure-Plus Medical Claims',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -75,7 +73,7 @@ class _MedicalClaimsPreviewState extends State<MedicalClaimsPreview> {
       ),
       home: MedicalClaimsHomeScreen(
         service: _service,
-        onScanBillWithOcr: _previewOcrHandoff,
+        onScanBillWithOcr: _sampleOcrScan,
       ),
     );
   }

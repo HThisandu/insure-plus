@@ -25,7 +25,7 @@ class MedicalClaim {
   }) : documents = List.unmodifiable(documents);
 
   static const String defaultClaimType = 'Medical';
-  static const String _metadataPrefix = '[Medical Claim]';
+  static const String _metaTag = '[Medical Claim]';
 
   static const List<String> relationships = [
     'Self',
@@ -41,7 +41,6 @@ class MedicalClaim {
     'Pharmacy',
   ];
 
-  // Exact 9 core Firestore `claims` collection fields
   final String claimId;
   final String userId;
   final String policyId;
@@ -52,7 +51,6 @@ class MedicalClaim {
   final List<MedicalBillDocument> documents;
   final DateTime createdAt;
 
-  // Medical domain fields encoded cleanly inside `description` for Firestore
   final String patientName;
   final String patientRelationship;
   final String hospitalName;
@@ -62,26 +60,28 @@ class MedicalClaim {
   final String? billNumber;
   final DateTime? billDate;
 
-  /// Formats medical metadata + user description into a single human-readable
-  /// `description` string so the Firestore `claims` document strictly keeps
-  /// the 9 backend-approved keys without losing medical context.
+  // Combines medical details into description so Firestore keeps the 9 core fields
   String toFirestoreDescription() {
-    final segments = <String>[
-      'Hospital: ${_sanitizeMetaValue(hospitalName)}',
-      'Patient: ${_sanitizeMetaValue(patientName)} (${_sanitizeMetaValue(patientRelationship)})',
-      'Treatment: ${_sanitizeMetaValue(treatmentType)}',
-      if (admissionDate != null) 'Admission: ${_formatIsoDate(admissionDate!)}',
-      if (dischargeDate != null) 'Discharge: ${_formatIsoDate(dischargeDate!)}',
-      if (billNumber != null && billNumber!.trim().isNotEmpty)
-        'BillNo: ${_sanitizeMetaValue(billNumber!)}',
-      if (billDate != null) 'BillDate: ${_formatIsoDate(billDate!)}',
+    final parts = <String>[
+      'Hospital: ${_cleanText(hospitalName)}',
+      'Patient: ${_cleanText(patientName)} (${_cleanText(patientRelationship)})',
+      'Treatment: ${_cleanText(treatmentType)}',
     ];
-    final cleanNotes = description.trim();
-    return '$_metadataPrefix ${segments.join(' | ')}\n$cleanNotes';
+    if (admissionDate != null) {
+      parts.add('Admission: ${_formatDate(admissionDate!)}');
+    }
+    if (dischargeDate != null) {
+      parts.add('Discharge: ${_formatDate(dischargeDate!)}');
+    }
+    if (billNumber != null && billNumber!.trim().isNotEmpty) {
+      parts.add('BillNo: ${_cleanText(billNumber!)}');
+    }
+    if (billDate != null) {
+      parts.add('BillDate: ${_formatDate(billDate!)}');
+    }
+    return '$_metaTag ${parts.join(' | ')}\n${description.trim()}';
   }
 
-  /// Emits strictly the 9 keys permitted by `firestore.rules` and
-  /// `docs/backend/database_schema.md`.
   Map<String, dynamic> toMap() {
     return {
       'claimId': claimId,
@@ -100,13 +100,11 @@ class MedicalClaim {
     Map<String, dynamic> map, {
     String? documentId,
   }) {
-    final rawDocuments = map['documents'];
     final parsedDocuments = <MedicalBillDocument>[];
-    if (rawDocuments is List) {
-      for (final item in rawDocuments) {
-        if (item is Map<String, dynamic>) {
-          parsedDocuments.add(MedicalBillDocument.fromMap(item));
-        } else if (item is Map) {
+    final rawDocs = map['documents'];
+    if (rawDocs is List) {
+      for (final item in rawDocs) {
+        if (item is Map) {
           parsedDocuments.add(
             MedicalBillDocument.fromMap(Map<String, dynamic>.from(item)),
           );
@@ -114,54 +112,90 @@ class MedicalClaim {
       }
     }
 
+    double parsedAmount = 0.0;
     final rawAmount = map['claimAmount'];
-    final parsedAmount = switch (rawAmount) {
-      num value => value.toDouble(),
-      String value => double.tryParse(value.replaceAll(',', '').trim()) ?? 0.0,
-      _ => 0.0,
-    };
+    if (rawAmount is num) {
+      parsedAmount = rawAmount.toDouble();
+    } else if (rawAmount is String) {
+      parsedAmount = double.tryParse(rawAmount.replaceAll(',', '')) ?? 0.0;
+    }
 
-    final mapClaimId = (map['claimId'] as String?)?.trim();
-    final resolvedClaimId =
-        (mapClaimId != null && mapClaimId.isNotEmpty)
-            ? mapClaimId
-            : (documentId ?? '');
+    final idFromMap = (map['claimId'] as String?)?.trim() ?? '';
+    final finalClaimId = idFromMap.isNotEmpty ? idFromMap : (documentId ?? '');
 
-    final rawDescription = (map['description'] as String?) ?? '';
-    final decoded = _decodeDescription(rawDescription);
+    final rawDesc = (map['description'] as String?) ?? '';
+    String notes = rawDesc.trim();
+    String? hospital;
+    String? patient;
+    String? relationship;
+    String? treatment;
+    DateTime? admission;
+    DateTime? discharge;
+    String? billNo;
+    DateTime? billDt;
+
+    if (rawDesc.startsWith(_metaTag)) {
+      final lineBreak = rawDesc.indexOf('\n');
+      final header = lineBreak >= 0
+          ? rawDesc.substring(_metaTag.length, lineBreak).trim()
+          : rawDesc.substring(_metaTag.length).trim();
+      notes = lineBreak >= 0 ? rawDesc.substring(lineBreak + 1).trim() : '';
+
+      for (final item in header.split('|')) {
+        final colon = item.indexOf(':');
+        if (colon <= 0) continue;
+        final key = item.substring(0, colon).trim();
+        final val = item.substring(colon + 1).trim();
+        if (val.isEmpty) continue;
+
+        if (key == 'Hospital') {
+          hospital = val;
+        } else if (key == 'Patient') {
+          final open = val.lastIndexOf('(');
+          final close = val.lastIndexOf(')');
+          if (open > 0 && close > open) {
+            patient = val.substring(0, open).trim();
+            relationship = val.substring(open + 1, close).trim();
+          } else {
+            patient = val;
+          }
+        } else if (key == 'Treatment') {
+          treatment = val;
+        } else if (key == 'Admission') {
+          admission = DateTime.tryParse(val);
+        } else if (key == 'Discharge') {
+          discharge = DateTime.tryParse(val);
+        } else if (key == 'BillNo') {
+          billNo = val;
+        } else if (key == 'BillDate') {
+          billDt = DateTime.tryParse(val);
+        }
+      }
+    }
 
     return MedicalClaim(
-      claimId: resolvedClaimId,
+      claimId: finalClaimId,
       userId: (map['userId'] as String?) ?? '',
       policyId: (map['policyId'] as String?) ?? '',
       claimType: (map['claimType'] as String?) ?? defaultClaimType,
       claimAmount: parsedAmount,
-      description: decoded.notes,
+      description: notes,
       status: MedicalClaimStatus.fromValue(map['status'] as String?),
       documents: parsedDocuments,
-      createdAt: _parseDateTime(map['createdAt']) ?? DateTime.now(),
-      patientName:
-          (map['patientName'] as String?) ??
-          decoded.patientName ??
-          'Policyholder',
+      createdAt: _parseDate(map['createdAt']) ?? DateTime.now(),
+      patientName: (map['patientName'] as String?) ?? patient ?? 'Policyholder',
       patientRelationship:
           (map['patientRelationship'] as String?) ??
-          decoded.patientRelationship ??
+          relationship ??
           relationships.first,
       hospitalName:
-          (map['hospitalName'] as String?) ??
-          decoded.hospitalName ??
-          'Medical Care',
+          (map['hospitalName'] as String?) ?? hospital ?? 'Medical Care',
       treatmentType:
-          (map['treatmentType'] as String?) ??
-          decoded.treatmentType ??
-          treatmentTypes[1],
-      admissionDate:
-          _parseDateTime(map['admissionDate']) ?? decoded.admissionDate,
-      dischargeDate:
-          _parseDateTime(map['dischargeDate']) ?? decoded.dischargeDate,
-      billNumber: (map['billNumber'] as String?) ?? decoded.billNumber,
-      billDate: _parseDateTime(map['billDate']) ?? decoded.billDate,
+          (map['treatmentType'] as String?) ?? treatment ?? treatmentTypes[1],
+      admissionDate: _parseDate(map['admissionDate']) ?? admission,
+      dischargeDate: _parseDate(map['dischargeDate']) ?? discharge,
+      billNumber: (map['billNumber'] as String?) ?? billNo,
+      billDate: _parseDate(map['billDate']) ?? billDt,
     );
   }
 
@@ -205,110 +239,21 @@ class MedicalClaim {
     );
   }
 
-  static String _sanitizeMetaValue(String input) =>
-      input.replaceAll('|', '/').replaceAll('\n', ' ').trim();
+  static String _cleanText(String value) =>
+      value.replaceAll('|', '/').replaceAll('\n', ' ').trim();
 
-  static String _formatIsoDate(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-'
-      '${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}';
-
-  static _DecodedMedicalMeta _decodeDescription(String raw) {
-    if (!raw.startsWith(_metadataPrefix)) {
-      return _DecodedMedicalMeta(notes: raw.trim());
-    }
-
-    final newlineIndex = raw.indexOf('\n');
-    final headerLine = newlineIndex >= 0
-        ? raw.substring(_metadataPrefix.length, newlineIndex).trim()
-        : raw.substring(_metadataPrefix.length).trim();
-    final notes = newlineIndex >= 0 ? raw.substring(newlineIndex + 1).trim() : '';
-
-    String? hospitalName;
-    String? patientName;
-    String? patientRelationship;
-    String? treatmentType;
-    DateTime? admissionDate;
-    DateTime? dischargeDate;
-    String? billNumber;
-    DateTime? billDate;
-
-    for (final part in headerLine.split('|')) {
-      final trimmed = part.trim();
-      final colonIdx = trimmed.indexOf(':');
-      if (colonIdx <= 0) continue;
-
-      final key = trimmed.substring(0, colonIdx).trim();
-      final val = trimmed.substring(colonIdx + 1).trim();
-      if (val.isEmpty) continue;
-
-      switch (key) {
-        case 'Hospital':
-          hospitalName = val;
-        case 'Patient':
-          final relMatch = RegExp(r'^(.*)\(([^()]+)\)$').firstMatch(val);
-          if (relMatch != null) {
-            patientName = relMatch.group(1)?.trim();
-            patientRelationship = relMatch.group(2)?.trim();
-          } else {
-            patientName = val;
-          }
-        case 'Treatment':
-          treatmentType = val;
-        case 'Admission':
-          admissionDate = DateTime.tryParse(val);
-        case 'Discharge':
-          dischargeDate = DateTime.tryParse(val);
-        case 'BillNo':
-          billNumber = val;
-        case 'BillDate':
-          billDate = DateTime.tryParse(val);
-      }
-    }
-
-    return _DecodedMedicalMeta(
-      notes: notes,
-      hospitalName: hospitalName,
-      patientName: patientName,
-      patientRelationship: patientRelationship,
-      treatmentType: treatmentType,
-      admissionDate: admissionDate,
-      dischargeDate: dischargeDate,
-      billNumber: billNumber,
-      billDate: billDate,
-    );
+  static String _formatDate(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
   }
 
-  static DateTime? _parseDateTime(dynamic value) {
+  static DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
     if (value is String) return DateTime.tryParse(value);
-    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
     return null;
   }
-}
-
-class _DecodedMedicalMeta {
-  const _DecodedMedicalMeta({
-    required this.notes,
-    this.hospitalName,
-    this.patientName,
-    this.patientRelationship,
-    this.treatmentType,
-    this.admissionDate,
-    this.dischargeDate,
-    this.billNumber,
-    this.billDate,
-  });
-
-  final String notes;
-  final String? hospitalName;
-  final String? patientName;
-  final String? patientRelationship;
-  final String? treatmentType;
-  final DateTime? admissionDate;
-  final DateTime? dischargeDate;
-  final String? billNumber;
-  final DateTime? billDate;
 }

@@ -34,63 +34,49 @@ abstract class MedicalClaimRepository {
   });
 }
 
-/// Production repository wired directly to the shared backend services:
-/// - `lib/services/claims_service.dart` (`submitClaim`, `getUserClaims`,
-///   `addClaimDocument`, `removeClaimDocument`)
-/// - `lib/services/storage_service.dart` (`uploadClaimDocument`,
-///   `downloadClaimDocument`, `deleteClaimDocument` on private Supabase bucket
-///   `claim-documents`)
+// Connects Medical Claims to ClaimsService (Firestore) and StorageService (Supabase)
 class FirestoreMedicalClaimRepository implements MedicalClaimRepository {
   FirestoreMedicalClaimRepository({
-    this._claimsService,
-    this._storageService,
-    this._firestore,
-    this._auth,
+    this.claimsService,
+    this.storageService,
   });
 
-  static const String claimsCollection = 'claims';
+  final ClaimsService? claimsService;
+  final StorageService? storageService;
 
-  final ClaimsService? _claimsService;
-  final StorageService? _storageService;
-  final FirebaseFirestore? _firestore;
-  final FirebaseAuth? _auth;
+  ClaimsService get _claims => claimsService ?? ClaimsService();
+  StorageService get _storage => storageService ?? StorageService();
 
-  ClaimsService get _claims => _claimsService ?? ClaimsService();
-  StorageService get _storage => _storageService ?? StorageService();
-  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
-  FirebaseAuth get _firebaseAuth => _auth ?? FirebaseAuth.instance;
-
-  List<MedicalClaim> _parseMedicalDocs(
-    Iterable<QueryDocumentSnapshot<Object?>> docs,
+  List<MedicalClaim> _mapSnapshotToMedicalClaims(
+    List<QueryDocumentSnapshot<Object?>> docs,
   ) {
-    final results = <MedicalClaim>[];
+    final list = <MedicalClaim>[];
     for (final doc in docs) {
       final raw = doc.data();
       if (raw is! Map) continue;
       final map = Map<String, dynamic>.from(raw);
-      final claimType = (map['claimType'] as String?)?.trim() ?? '';
-      if (claimType != MedicalClaim.defaultClaimType) continue;
-      results.add(MedicalClaim.fromMap(map, documentId: doc.id));
+      if (map['claimType'] != MedicalClaim.defaultClaimType) continue;
+      list.add(MedicalClaim.fromMap(map, documentId: doc.id));
     }
-    results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return results;
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   @override
   Stream<List<MedicalClaim>> watchClaims(String userId) async* {
-    // 1. Initial load via existing backend ClaimsService.getUserClaims()
-    final initialSnapshot = await _claims.getUserClaims();
-    yield _parseMedicalDocs(initialSnapshot.docs);
+    // 1. Load initial user claims using ClaimsService
+    final initial = await _claims.getUserClaims();
+    yield _mapSnapshotToMedicalClaims(initial.docs);
 
-    // 2. Real-time updates for status changes made by Operations/Admin
-    final activeUid = _firebaseAuth.currentUser?.uid ?? userId;
-    if (activeUid.trim().isEmpty) return;
+    // 2. Listen for status updates in Firestore
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? userId;
+    if (uid.trim().isEmpty) return;
 
-    yield* _db
-        .collection(claimsCollection)
-        .where('userId', isEqualTo: activeUid)
+    yield* FirebaseFirestore.instance
+        .collection('claims')
+        .where('userId', isEqualTo: uid)
         .snapshots()
-        .map((snapshot) => _parseMedicalDocs(snapshot.docs));
+        .map((snapshot) => _mapSnapshotToMedicalClaims(snapshot.docs));
   }
 
   @override
@@ -99,9 +85,9 @@ class FirestoreMedicalClaimRepository implements MedicalClaimRepository {
     String? localBillFilePath,
     List<PendingMedicalAttachment> attachments = const [],
   }) async {
-    final activeUid = _firebaseAuth.currentUser?.uid ?? claim.userId;
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? claim.userId;
 
-    // 1. Create the claim in Firestore via ClaimsService.submitClaim()
+    // 1. Save claim details in Firestore
     final claimId = await _claims.submitClaim(
       policyId: claim.policyId,
       claimType: MedicalClaim.defaultClaimType,
@@ -109,67 +95,62 @@ class FirestoreMedicalClaimRepository implements MedicalClaimRepository {
       description: claim.toFirestoreDescription(),
     );
 
-    // 2. Gather any local medical bills / reports to upload to Supabase
-    final pendingUploads = _collectPendingAttachments(
-      localBillFilePath: localBillFilePath,
-      attachments: attachments,
-    );
+    // 2. Upload bills/reports to Supabase `claim-documents` bucket
+    final filesToUpload = _mergeAttachments(localBillFilePath, attachments);
+    final savedDocs = <MedicalBillDocument>[...claim.documents];
 
-    final uploadedDocuments = <MedicalBillDocument>[...claim.documents];
+    for (final file in filesToUpload) {
+      final bytes =
+          file.bytes ?? await File(file.localPath!).readAsBytes();
 
-    for (final item in pendingUploads) {
-      final fileBytes = await _readAttachmentBytes(item);
-      // Upload binary to private Supabase `claim-documents` bucket
       final storagePath = await _storage.uploadClaimDocument(
         claimId: claimId,
-        fileName: item.fileName,
-        fileBytes: fileBytes,
-        contentType: item.contentType,
+        fileName: file.fileName,
+        fileBytes: bytes,
+        contentType: file.contentType,
       );
 
-      // Persist document metadata to Firestore via ClaimsService.addClaimDocument()
+      // 3. Save document metadata in Firestore
       await _claims.addClaimDocument(
         claimId: claimId,
-        documentType: item.documentType,
-        fileName: item.fileName,
+        documentType: file.documentType,
+        fileName: file.fileName,
         storagePath: storagePath,
       );
 
       final now = DateTime.now();
-      uploadedDocuments.add(
+      savedDocs.add(
         MedicalBillDocument(
-          documentId: 'DOC-${now.microsecondsSinceEpoch}',
-          documentType: item.documentType,
-          fileName: item.fileName,
+          documentId: 'DOC-${now.millisecondsSinceEpoch}',
+          documentType: file.documentType,
+          fileName: file.fileName,
           storagePath: storagePath,
           uploadedAt: now,
-          localPreviewPath: item.localPath,
+          localPreviewPath: file.localPath,
         ),
       );
     }
 
-    final refreshed = await getClaimById(claimId);
-    if (refreshed != null) {
-      return refreshed;
-    }
+    final fromDb = await getClaimById(claimId);
+    if (fromDb != null) return fromDb;
 
     return claim.copyWith(
       claimId: claimId,
-      userId: activeUid,
-      claimType: MedicalClaim.defaultClaimType,
+      userId: uid,
       status: MedicalClaimStatus.submitted,
-      documents: uploadedDocuments,
+      documents: savedDocs,
     );
   }
 
   @override
   Future<MedicalClaim?> getClaimById(String claimId) async {
-    final snapshot = await _db.collection(claimsCollection).doc(claimId).get();
-    final data = snapshot.data();
-    if (!snapshot.exists || data == null) {
-      return null;
-    }
-    return MedicalClaim.fromMap(data, documentId: snapshot.id);
+    final doc = await FirebaseFirestore.instance
+        .collection('claims')
+        .doc(claimId)
+        .get();
+    final data = doc.data();
+    if (!doc.exists || data == null) return null;
+    return MedicalClaim.fromMap(data, documentId: doc.id);
   }
 
   @override
@@ -182,7 +163,6 @@ class FirestoreMedicalClaimRepository implements MedicalClaimRepository {
     }
     if (!kIsWeb &&
         localPreviewPath != null &&
-        localPreviewPath.trim().isNotEmpty &&
         File(localPreviewPath).existsSync()) {
       return File(localPreviewPath).readAsBytes();
     }
@@ -195,91 +175,69 @@ class FirestoreMedicalClaimRepository implements MedicalClaimRepository {
     required String documentId,
     required String storagePath,
   }) async {
-    if (claimId.trim().isNotEmpty && documentId.trim().isNotEmpty) {
+    if (claimId.isNotEmpty && documentId.isNotEmpty) {
       await _claims.removeClaimDocument(
         claimId: claimId,
         documentId: documentId,
       );
-    } else if (storagePath.trim().isNotEmpty) {
+    } else if (storagePath.isNotEmpty) {
       await _storage.deleteClaimDocument(storagePath: storagePath);
     }
   }
-
-  Future<Uint8List> _readAttachmentBytes(PendingMedicalAttachment item) async {
-    if (item.bytes != null) return item.bytes!;
-    final path = item.localPath?.trim();
-    if (path == null || path.isEmpty) {
-      throw const FileSystemException('No medical bill file path provided.');
-    }
-    final file = File(path);
-    if (!file.existsSync()) {
-      throw FileSystemException(
-        'Selected medical document could not be found.',
-        path,
-      );
-    }
-    return file.readAsBytes();
-  }
 }
 
-List<PendingMedicalAttachment> _collectPendingAttachments({
-  String? localBillFilePath,
-  List<PendingMedicalAttachment> attachments = const [],
-}) {
-  final combined = <PendingMedicalAttachment>[...attachments];
-  final singlePath = localBillFilePath?.trim();
-  if (singlePath != null && singlePath.isNotEmpty) {
-    final alreadyIncluded = combined.any((a) => a.localPath == singlePath);
-    if (!alreadyIncluded) {
-      final segments = singlePath
-          .split(RegExp(r'[/\\]'))
-          .where((part) => part.isNotEmpty)
-          .toList();
-      final name = segments.isNotEmpty ? segments.last : 'medical_bill.jpg';
-      combined.add(
+List<PendingMedicalAttachment> _mergeAttachments(
+  String? singlePath,
+  List<PendingMedicalAttachment> attachments,
+) {
+  final list = <PendingMedicalAttachment>[...attachments];
+  if (singlePath != null && singlePath.trim().isNotEmpty) {
+    final path = singlePath.trim();
+    final exists = list.any((item) => item.localPath == path);
+    if (!exists) {
+      final name = path.split('/').last.split('\\').last;
+      list.add(
         PendingMedicalAttachment(
-          fileName: name,
-          documentType: 'Medical Bill',
-          localPath: singlePath,
+          fileName: name.isEmpty ? 'medical_bill.jpg' : name,
+          localPath: path,
         ),
       );
     }
   }
-  return combined;
+  return list;
 }
 
+// Local repository with Sri Lankan sample claims for testing & preview
 class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
   InMemoryMedicalClaimRepository({
     Iterable<MedicalClaim>? initialClaims,
     this.simulatedDelay = const Duration(milliseconds: 250),
   }) : _claims = {
-         for (final claim in initialClaims ?? _defaultSampleClaims())
+         for (final claim in initialClaims ?? _sampleClaims())
            claim.claimId: claim,
        };
 
   final Duration simulatedDelay;
   final Map<String, MedicalClaim> _claims;
   final Map<String, Uint8List> _storedBytes = {};
-  final StreamController<void> _changesController =
-      StreamController<void>.broadcast();
-  int _sequence = 4;
+  final StreamController<void> _controller = StreamController<void>.broadcast();
+  int _counter = 4;
 
-  static List<MedicalClaim> _defaultSampleClaims() => [
+  static List<MedicalClaim> _sampleClaims() => [
     MedicalClaim(
       claimId: 'MED-2026-001',
       userId: 'DEMO-USER-01',
       policyId: 'MEDICAL-001',
       claimAmount: 185500.00,
       description:
-          'Inpatient surgical admission and 3-day ward stay for laparoscopic appendectomy.',
+          'Inpatient surgical admission and 3-day ward stay for appendectomy.',
       status: MedicalClaimStatus.underReview,
       documents: [
         MedicalBillDocument(
           documentId: 'DOC-MED-001',
           documentType: 'Hospital final bill',
           fileName: 'asiri-surgical-final-bill.pdf',
-          storagePath:
-              'DEMO-USER-01/MED-2026-001/1763452200000_asiri-surgical-final-bill.pdf',
+          storagePath: 'DEMO-USER-01/MED-2026-001/asiri-surgical-final-bill.pdf',
           uploadedAt: DateTime(2026, 11, 18, 10, 30),
         ),
       ],
@@ -298,16 +256,14 @@ class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
       userId: 'DEMO-USER-01',
       policyId: 'MEDICAL-001',
       claimAmount: 24750.00,
-      description:
-          'Outpatient specialist consultation, ECG screening, and prescribed cardiac medication.',
+      description: 'Outpatient specialist consultation and ECG screening.',
       status: MedicalClaimStatus.approved,
       documents: [
         MedicalBillDocument(
           documentId: 'DOC-MED-002',
           documentType: 'Medical Bill',
           fileName: 'nawaloka-opd-receipt.jpg',
-          storagePath:
-              'DEMO-USER-01/MED-2026-002/1762940700000_nawaloka-opd-receipt.jpg',
+          storagePath: 'DEMO-USER-01/MED-2026-002/nawaloka-opd-receipt.jpg',
           uploadedAt: DateTime(2026, 11, 12, 15, 15),
         ),
       ],
@@ -324,8 +280,7 @@ class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
       userId: 'DEMO-USER-01',
       policyId: 'MEDICAL-001',
       claimAmount: 42300.00,
-      description:
-          'Pediatric diagnostic lab panel, chest X-ray, and MRI scan requested by consultant.',
+      description: 'Diagnostic blood panel and MRI scan.',
       status: MedicalClaimStatus.submitted,
       documents: [
         MedicalBillDocument(
@@ -333,7 +288,7 @@ class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
           documentType: 'Medical Report',
           fileName: 'lanka-hospitals-diagnostics-bill.jpg',
           storagePath:
-              'DEMO-USER-01/MED-2026-003/1763612100000_lanka-hospitals-diagnostics-bill.jpg',
+              'DEMO-USER-01/MED-2026-003/lanka-hospitals-diagnostics-bill.jpg',
           uploadedAt: DateTime(2026, 11, 20, 9, 45),
         ),
       ],
@@ -347,23 +302,19 @@ class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
     ),
   ];
 
-  List<MedicalClaim> _claimsForUser(String userId) {
-    final matches = _claims.values
-        .where(
-          (claim) =>
-              claim.claimType == MedicalClaim.defaultClaimType &&
-              claim.userId == userId,
-        )
+  List<MedicalClaim> _forUser(String userId) {
+    final list = _claims.values
+        .where((c) => c.userId == userId && c.claimType == 'Medical')
         .toList();
-    matches.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return matches;
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   @override
   Stream<List<MedicalClaim>> watchClaims(String userId) async* {
-    yield _claimsForUser(userId);
-    await for (final _ in _changesController.stream) {
-      yield _claimsForUser(userId);
+    yield _forUser(userId);
+    await for (final _ in _controller.stream) {
+      yield _forUser(userId);
     }
   }
 
@@ -377,58 +328,40 @@ class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
       await Future<void>.delayed(simulatedDelay);
     }
 
-    final resolvedClaimId = claim.claimId.trim().isNotEmpty
+    final id = claim.claimId.trim().isNotEmpty
         ? claim.claimId.trim()
-        : 'MED-${DateTime.now().year}-${(_sequence++).toString().padLeft(3, '0')}';
+        : 'MED-${DateTime.now().year}-${(_counter++).toString().padLeft(3, '0')}';
 
-    final updatedDocuments = List<MedicalBillDocument>.from(claim.documents);
-    final pendingUploads = _collectPendingAttachments(
-      localBillFilePath: localBillFilePath,
-      attachments: attachments,
-    );
+    final docs = List<MedicalBillDocument>.from(claim.documents);
+    final files = _mergeAttachments(localBillFilePath, attachments);
 
-    for (var i = 0; i < pendingUploads.length; i++) {
-      final item = pendingUploads[i];
+    for (var i = 0; i < files.length; i++) {
+      final item = files[i];
       final now = DateTime.now();
-      final safeName = item.fileName.replaceAll(
-        RegExp(r'[^a-zA-Z0-9._-]'),
-        '_',
-      );
-      final storagePath =
-          '${claim.userId}/$resolvedClaimId/${now.millisecondsSinceEpoch}_${i}_$safeName';
+      final path = '${claim.userId}/$id/${now.millisecondsSinceEpoch}_${item.fileName}';
       if (item.bytes != null) {
-        _storedBytes[storagePath] = item.bytes!;
+        _storedBytes[path] = item.bytes!;
       }
-
-      updatedDocuments.add(
+      docs.add(
         MedicalBillDocument(
           documentId: 'DOC-${now.millisecondsSinceEpoch}-$i',
           documentType: item.documentType,
           fileName: item.fileName,
-          storagePath: storagePath,
+          storagePath: path,
           uploadedAt: now,
           localPreviewPath: item.localPath,
         ),
       );
     }
 
-    final savedClaim = claim.copyWith(
-      claimId: resolvedClaimId,
-      claimType: MedicalClaim.defaultClaimType,
-      documents: updatedDocuments,
-    );
-
-    _claims[resolvedClaimId] = savedClaim;
-    if (!_changesController.isClosed) {
-      _changesController.add(null);
-    }
-    return savedClaim;
+    final saved = claim.copyWith(claimId: id, documents: docs);
+    _claims[id] = saved;
+    if (!_controller.isClosed) _controller.add(null);
+    return saved;
   }
 
   @override
-  Future<MedicalClaim?> getClaimById(String claimId) async {
-    return _claims[claimId];
-  }
+  Future<MedicalClaim?> getClaimById(String claimId) async => _claims[claimId];
 
   @override
   Future<Uint8List?> downloadDocument({
@@ -440,7 +373,6 @@ class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
     }
     if (!kIsWeb &&
         localPreviewPath != null &&
-        localPreviewPath.trim().isNotEmpty &&
         File(localPreviewPath).existsSync()) {
       return File(localPreviewPath).readAsBytes();
     }
@@ -454,21 +386,16 @@ class InMemoryMedicalClaimRepository implements MedicalClaimRepository {
     required String storagePath,
   }) async {
     _storedBytes.remove(storagePath);
-    final existing = _claims[claimId];
-    if (existing == null) return;
-
-    final remaining = existing.documents
-        .where((doc) => doc.documentId != documentId)
+    final claim = _claims[claimId];
+    if (claim == null) return;
+    final remaining = claim.documents
+        .where((d) => d.documentId != documentId)
         .toList();
-    _claims[claimId] = existing.copyWith(documents: remaining);
-    if (!_changesController.isClosed) {
-      _changesController.add(null);
-    }
+    _claims[claimId] = claim.copyWith(documents: remaining);
+    if (!_controller.isClosed) _controller.add(null);
   }
 
   void dispose() {
-    if (!_changesController.isClosed) {
-      _changesController.close();
-    }
+    if (!_controller.isClosed) _controller.close();
   }
 }

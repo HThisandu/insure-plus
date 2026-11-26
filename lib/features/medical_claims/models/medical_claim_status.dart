@@ -15,20 +15,19 @@ enum MedicalClaimStatus {
       return MedicalClaimStatus.submitted;
     }
 
-    final normalized = rawValue.trim().toLowerCase().replaceAll(
-      RegExp(r'[\s_-]+'),
-      '',
-    );
+    final cleaned = rawValue
+        .trim()
+        .toLowerCase()
+        .replaceAll(' ', '')
+        .replaceAll('_', '')
+        .replaceAll('-', '');
 
     for (final status in MedicalClaimStatus.values) {
       final valueKey = status.value.toLowerCase();
-      final labelKey = status.label.toLowerCase().replaceAll(
-        RegExp(r'[\s_-]+'),
-        '',
-      );
-      if (normalized == valueKey ||
-          normalized == labelKey ||
-          normalized == status.name.toLowerCase()) {
+      final labelKey = status.label.toLowerCase().replaceAll(' ', '');
+      if (cleaned == valueKey ||
+          cleaned == labelKey ||
+          cleaned == status.name.toLowerCase()) {
         return status;
       }
     }

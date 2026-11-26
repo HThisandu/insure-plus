@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/medical_claim_status.dart';
 
-/// Shared Figma design tokens scoped strictly to the Medical Claims module.
+// Theme colors for Medical Claims screens
 class MedicalClaimsColors {
-  const MedicalClaimsColors._();
 
   static const Color navy = Color(0xFF13365B);
   static const Color navyDark = Color(0xFF102A43);
