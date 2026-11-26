@@ -1,14 +1,17 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'common/services/firebase_app_service.dart';
 import 'common/services/supabase_app_service.dart';
 import 'common/theme/insurecare_theme.dart';
+import 'features/authentication/screens/account_screen.dart';
+import 'features/authentication/screens/login_screen.dart';
 import 'modules/motor_claims/motor_claims.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase provides the signed-in identity. Supabase stores claims and files.
+  // Firebase Auth supplies the signed-in identity; Supabase stores motor claims.
   await FirebaseAppService.initialize();
   await SupabaseAppService.initialize();
 
@@ -24,9 +27,61 @@ class MyApp extends StatelessWidget {
       title: 'Insure Plus',
       debugShowCheckedModeBanner: false,
       theme: InsureCareTheme.light,
-      home: const MyHomePage(title: 'Insure Plus'),
+      home: const AuthGate(),
       routes: {
         '/motor-claims': (context) => const MotorClaimsDashboardScreen(),
+      },
+    );
+  }
+}
+
+/// Keeps the existing Firebase Email/Password authentication flow in front
+/// of the Motor Claims dashboard.
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Stream<User?> _session = FirebaseAuth.instance.idTokenChanges();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: _session,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return const Scaffold(
+            body: Center(
+              child: Text(
+                'Unable to check your session. Please restart the app.',
+              ),
+            ),
+          );
+        }
+
+        final user = snapshot.data;
+        if (user == null) return const LoginScreen();
+
+        return MyHomePage(
+          title: 'Insure Plus',
+          onAccount: () {
+            Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    AccountScreen(user: user, token: user.getIdTokenResult()),
+              ),
+            );
+          },
+        );
       },
     );
   }
@@ -35,9 +90,10 @@ class MyApp extends StatelessWidget {
 /// Insure Plus landing screen styled from the supplied Figma home dashboard.
 /// The summary is populated only from real Motor Claims records.
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  const MyHomePage({super.key, required this.title, this.onAccount});
 
   final String title;
+  final VoidCallback? onAccount;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -108,10 +164,10 @@ class _MyHomePageState extends State<MyHomePage> {
                               shape: BoxShape.circle,
                             ),
                             child: IconButton(
-                              onPressed: () {},
-                              tooltip: 'Notifications',
+                              onPressed: widget.onAccount,
+                              tooltip: 'My account',
                               icon: const Icon(
-                                Icons.notifications_none_rounded,
+                                Icons.account_circle_outlined,
                                 color: InsureCareTheme.navy,
                               ),
                             ),
@@ -318,7 +374,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                                 ),
                                                 const SizedBox(height: 4),
                                                 Text(
-                                                  '${claim.claimId} · ${claim.status.label}',
+                                                  '${claim.claimId} â”¬â•– ${claim.status.label}',
                                                   style: const TextStyle(
                                                     color:
                                                         InsureCareTheme.muted,
@@ -387,7 +443,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                       minimumSize: const Size(44, 36),
                                       foregroundColor: InsureCareTheme.navy,
                                     ),
-                                    child: const Text('Explore claims  ›'),
+                                    child: const Text(
+                                      'Explore claims  Î“Ã‡â•‘',
+                                    ),
                                   ),
                                 ],
                               ),
