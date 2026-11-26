@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/medical_bill_document.dart';
@@ -7,15 +9,47 @@ import '../models/medical_claim.dart';
 import '../models/medical_claim_status.dart';
 import 'medical_claim_repository.dart';
 
+enum MedicalClaimsViewFilter {
+  all('All claims'),
+  inProgress('In progress'),
+  closed('Closed');
+
+  const MedicalClaimsViewFilter(this.label);
+
+  final String label;
+}
+
 class MedicalClaimService extends ChangeNotifier {
   MedicalClaimService({
     required this._repository,
-    this.userId = 'DEMO-USER-01',
+    String? userId,
     bool autoLoad = true,
-  }) {
+  }) : userId = _resolveUserId(userId) {
     if (autoLoad) {
       startWatching();
     }
+  }
+
+  /// Convenience factory for live production screens: uses the existing
+  /// Firebase Auth session + shared `ClaimsService` & Supabase `StorageService`.
+  factory MedicalClaimService.live({bool autoLoad = true}) {
+    return MedicalClaimService(
+      repository: FirestoreMedicalClaimRepository(),
+      autoLoad: autoLoad,
+    );
+  }
+
+  static String _resolveUserId(String? explicitUserId) {
+    if (explicitUserId != null && explicitUserId.trim().isNotEmpty) {
+      return explicitUserId.trim();
+    }
+    if (Firebase.apps.isNotEmpty) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null && uid.isNotEmpty) {
+        return uid;
+      }
+    }
+    return 'DEMO-USER-01';
   }
 
   final MedicalClaimRepository _repository;
@@ -23,6 +57,7 @@ class MedicalClaimService extends ChangeNotifier {
 
   StreamSubscription<List<MedicalClaim>>? _claimsSubscription;
   List<MedicalClaim> _claims = const [];
+  MedicalClaimsViewFilter _viewFilter = MedicalClaimsViewFilter.all;
   MedicalClaimStatus? _selectedStatusFilter;
   String _searchQuery = '';
   bool _isLoading = false;
@@ -31,6 +66,8 @@ class MedicalClaimService extends ChangeNotifier {
   bool _disposed = false;
 
   List<MedicalClaim> get claims => List.unmodifiable(_claims);
+
+  MedicalClaimsViewFilter get viewFilter => _viewFilter;
 
   MedicalClaimStatus? get selectedStatusFilter => _selectedStatusFilter;
 
@@ -42,19 +79,42 @@ class MedicalClaimService extends ChangeNotifier {
 
   String? get errorMessage => _errorMessage;
 
+  static bool isInProgressStatus(MedicalClaimStatus status) =>
+      status == MedicalClaimStatus.submitted ||
+      status == MedicalClaimStatus.underReview ||
+      status == MedicalClaimStatus.moreInfoRequired;
+
+  static bool isClosedStatus(MedicalClaimStatus status) =>
+      status == MedicalClaimStatus.approved ||
+      status == MedicalClaimStatus.rejected;
+
+  int get inProgressCount =>
+      _claims.where((claim) => isInProgressStatus(claim.status)).length;
+
+  int get closedCount =>
+      _claims.where((claim) => isClosedStatus(claim.status)).length;
+
   List<MedicalClaim> get filteredClaims {
     final normalizedQuery = _searchQuery.trim().toLowerCase();
     return _claims.where((claim) {
-      final matchesStatus =
-          _selectedStatusFilter == null ||
-          claim.status == _selectedStatusFilter;
-      if (!matchesStatus) return false;
+      if (_selectedStatusFilter != null &&
+          claim.status != _selectedStatusFilter) {
+        return false;
+      }
+
+      final matchesGroup = switch (_viewFilter) {
+        MedicalClaimsViewFilter.all => true,
+        MedicalClaimsViewFilter.inProgress => isInProgressStatus(claim.status),
+        MedicalClaimsViewFilter.closed => isClosedStatus(claim.status),
+      };
+      if (!matchesGroup) return false;
       if (normalizedQuery.isEmpty) return true;
 
       return claim.claimId.toLowerCase().contains(normalizedQuery) ||
           claim.hospitalName.toLowerCase().contains(normalizedQuery) ||
           claim.patientName.toLowerCase().contains(normalizedQuery) ||
           claim.treatmentType.toLowerCase().contains(normalizedQuery) ||
+          claim.description.toLowerCase().contains(normalizedQuery) ||
           (claim.billNumber?.toLowerCase().contains(normalizedQuery) ?? false);
     }).toList();
   }
@@ -109,9 +169,20 @@ class MedicalClaimService extends ChangeNotifier {
     startWatching();
   }
 
+  void setViewFilter(MedicalClaimsViewFilter filter) {
+    if (_viewFilter == filter && _selectedStatusFilter == null) return;
+    _viewFilter = filter;
+    _selectedStatusFilter = null;
+    _safeNotifyListeners();
+  }
+
   void setStatusFilter(MedicalClaimStatus? status) {
-    if (_selectedStatusFilter == status) return;
+    if (_selectedStatusFilter == status &&
+        _viewFilter == MedicalClaimsViewFilter.all) {
+      return;
+    }
     _selectedStatusFilter = status;
+    _viewFilter = MedicalClaimsViewFilter.all;
     _safeNotifyListeners();
   }
 
@@ -140,6 +211,51 @@ class MedicalClaimService extends ChangeNotifier {
     }
   }
 
+  Future<Uint8List?> downloadClaimDocument(MedicalBillDocument document) async {
+    try {
+      return await _repository.downloadDocument(
+        storagePath: document.storagePath,
+        localPreviewPath: document.localPreviewPath,
+      );
+    } catch (error) {
+      _errorMessage = 'Failed to download medical document: $error';
+      _safeNotifyListeners();
+      return null;
+    }
+  }
+
+  Future<bool> deleteClaimDocument({
+    required String claimId,
+    required MedicalBillDocument document,
+  }) async {
+    try {
+      await _repository.deleteDocument(
+        claimId: claimId,
+        documentId: document.documentId,
+        storagePath: document.storagePath,
+      );
+      final existing = findClaim(claimId);
+      if (existing != null) {
+        final updatedDocs = existing.documents
+            .where((d) => d.documentId != document.documentId)
+            .toList();
+        _claims = [
+          for (final c in _claims)
+            if (c.claimId == claimId)
+              c.copyWith(documents: updatedDocs)
+            else
+              c,
+        ];
+        _safeNotifyListeners();
+      }
+      return true;
+    } catch (error) {
+      _errorMessage = 'Failed to remove medical document: $error';
+      _safeNotifyListeners();
+      return false;
+    }
+  }
+
   Future<MedicalClaim?> submitMedicalClaim({
     String? userId,
     required String policyId,
@@ -155,6 +271,7 @@ class MedicalClaimService extends ChangeNotifier {
     DateTime? billDate,
     List<MedicalBillDocument> documents = const [],
     String? localBillFilePath,
+    List<PendingMedicalAttachment> attachments = const [],
   }) async {
     _isSubmitting = true;
     _errorMessage = null;
@@ -164,7 +281,7 @@ class MedicalClaimService extends ChangeNotifier {
       final resolvedUserId =
           (userId != null && userId.trim().isNotEmpty)
               ? userId.trim()
-              : this.userId;
+              : _resolveUserId(this.userId);
       final newClaim = MedicalClaim(
         claimId: '',
         userId: resolvedUserId,
@@ -189,12 +306,14 @@ class MedicalClaimService extends ChangeNotifier {
       final savedClaim = await _repository.submitClaim(
         newClaim,
         localBillFilePath: localBillFilePath,
+        attachments: attachments,
       );
 
-      if (!_claims.any((claim) => claim.claimId == savedClaim.claimId)) {
-        _claims = [savedClaim, ..._claims]
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      }
+      _claims = [
+        savedClaim,
+        for (final existing in _claims)
+          if (existing.claimId != savedClaim.claimId) existing,
+      ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       _isSubmitting = false;
       _safeNotifyListeners();
