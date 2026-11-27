@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Policy {
   final String policyId;
+  final String userId;
   final String policyName;
   final String category;
   final String description;
@@ -15,6 +16,7 @@ class Policy {
 
   const Policy({
     required this.policyId,
+    required this.userId,
     required this.policyName,
     required this.category,
     required this.description,
@@ -57,6 +59,7 @@ class Policy {
   factory Policy.fromMap(Map<String, dynamic> map, String id) {
     return Policy(
       policyId: id,
+      userId: map['userId']?.toString() ?? '',
       policyName: map['policyName']?.toString() ?? '',
       category: map['category']?.toString() ?? '',
       description: map['description']?.toString() ?? '',
@@ -72,6 +75,7 @@ class Policy {
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId,
       'policyName': policyName,
       'category': category,
       'description': description,

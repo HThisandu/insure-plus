@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../model/policy.dart';
 import '../services/policy_service.dart';
-import '../widgets/policy_card.dart';
 import 'policy_details_screen.dart';
 
 class InsuranceDashboard extends StatelessWidget {
   const InsuranceDashboard({super.key});
 
-  static const Color primaryColor = Color(0xFF123B65);
-  static const Color backgroundColor = Color(0xFFF5F7FB);
+  static const Color primaryColor = Color(0xFF153E66);
+  static const Color backgroundColor = Color(0xFFF4F7FC);
 
   static final PolicyService policyService = PolicyService();
 
@@ -22,16 +21,23 @@ class InsuranceDashboard extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Insure-Plus',
-          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: primaryColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 21,
+          ),
         ),
         actions: [
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.notifications_none, color: primaryColor),
+            icon: const Icon(
+              Icons.notifications_none_rounded,
+              color: primaryColor,
+            ),
           ),
+          const SizedBox(width: 8),
         ],
       ),
-
       body: SafeArea(
         child: StreamBuilder<List<Policy>>(
           stream: policyService.getPolicies(),
@@ -55,7 +61,7 @@ class InsuranceDashboard extends StatelessWidget {
               );
             }
 
-            final List<Policy> policies = snapshot.data ?? [];
+            final policies = snapshot.data ?? [];
 
             final activePolicies = policies
                 .where((policy) => policy.isActive)
@@ -81,59 +87,92 @@ class InsuranceDashboard extends StatelessWidget {
                 const Text(
                   'Hello, Policyholder 👋',
                   style: TextStyle(
-                    fontSize: 23,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: primaryColor,
                   ),
                 ),
-
-                const SizedBox(height: 6),
-
+                const SizedBox(height: 7),
                 const Text(
-                  'Manage your insurance policies in one place.',
-                  style: TextStyle(color: Colors.grey),
+                  'Welcome back! Manage your insurance with ease.',
+                  style: TextStyle(color: Colors.blueGrey, fontSize: 14),
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 25),
 
-                // Overview Card
+                // Coverage overview
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    color: primaryColor,
-                    borderRadius: BorderRadius.circular(20),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF153E66), Color(0xFF24669B)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withValues(alpha: 0.15),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Total Coverage',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.shield_outlined,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'TOTAL COVERAGE',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              letterSpacing: 1,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
-
-                      const SizedBox(height: 8),
-
+                      const SizedBox(height: 12),
                       Text(
                         'LKR ${totalCoverage.toStringAsFixed(2)}',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 25,
+                          fontSize: 26,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-
-                      const SizedBox(height: 20),
-
+                      const SizedBox(height: 24),
+                      const Divider(color: Colors.white24),
+                      const SizedBox(height: 14),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _overviewItem(
-                            'Active Policies',
-                            activePolicies.toString().padLeft(2, '0'),
+                          Expanded(
+                            child: _overviewItem(
+                              'Active Policies',
+                              activePolicies.toString().padLeft(2, '0'),
+                              Icons.verified_user_outlined,
+                            ),
                           ),
-                          _overviewItem(
-                            'Remaining',
-                            '${remainingPercentage.toStringAsFixed(1)}%',
+                          Container(
+                            width: 1,
+                            height: 45,
+                            color: Colors.white24,
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: _overviewItem(
+                              'Remaining Balance',
+                              '${remainingPercentage.toStringAsFixed(1)}%',
+                              Icons.account_balance_wallet_outlined,
+                            ),
                           ),
                         ],
                       ),
@@ -141,19 +180,10 @@ class InsuranceDashboard extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 30),
 
-                // Insurance Categories
-                const Text(
-                  'Insurance Categories',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
+                _sectionTitle('Insurance Categories'),
+                const SizedBox(height: 15),
 
                 GridView.count(
                   crossAxisCount: 2,
@@ -161,68 +191,63 @@ class InsuranceDashboard extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
-                  childAspectRatio: 1.25,
+                  childAspectRatio: 1.35,
                   children: [
                     _categoryCard(
-                      Icons.directions_car,
+                      Icons.directions_car_rounded,
                       'Motor Insurance',
-                      Colors.blue,
+                      const Color(0xFF3478C7),
                     ),
                     _categoryCard(
-                      Icons.local_hospital,
+                      Icons.local_hospital_rounded,
                       'Medical Insurance',
-                      Colors.green,
+                      const Color(0xFF27A477),
                     ),
                     _categoryCard(
-                      Icons.favorite,
+                      Icons.favorite_rounded,
                       'Life Insurance',
-                      Colors.redAccent,
+                      const Color(0xFFE16C78),
                     ),
                     _categoryCard(
-                      Icons.flight,
+                      Icons.flight_rounded,
                       'Travel Insurance',
-                      Colors.orange,
+                      const Color(0xFFE6A044),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 30),
 
-                // My Policies
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'My Policies',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
-                      ),
-                    ),
-
+                    _sectionTitle('My Policies'),
                     Text(
                       '${policies.length} Policies',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.blueGrey,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 15),
 
                 if (policies.isEmpty)
                   Container(
                     padding: const EdgeInsets.all(25),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                     child: const Column(
                       children: [
                         Icon(
                           Icons.description_outlined,
                           size: 45,
-                          color: Colors.grey,
+                          color: Colors.blueGrey,
                         ),
                         SizedBox(height: 12),
                         Text(
@@ -244,20 +269,8 @@ class InsuranceDashboard extends StatelessWidget {
                 else
                   ...policies.map(
                     (policy) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: PolicyCard(
-                        title: policy.policyName,
-                        subtitle: '${policy.policyId} • ${policy.status}',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  PolicyDetailsScreen(policy: policy),
-                            ),
-                          );
-                        },
-                      ),
+                      padding: const EdgeInsets.only(bottom: 13),
+                      child: _policyCard(policy, context),
                     ),
                   ),
               ],
@@ -268,17 +281,39 @@ class InsuranceDashboard extends StatelessWidget {
     );
   }
 
-  Widget _overviewItem(String title, String value) {
+  Widget _sectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 19,
+        fontWeight: FontWeight.bold,
+        color: primaryColor,
+      ),
+    );
+  }
+
+  Widget _overviewItem(String title, String value, IconData icon) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: Colors.white70)),
-        const SizedBox(height: 5),
+        Row(
+          children: [
+            Icon(icon, color: Colors.white70, size: 16),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         Text(
           value,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 20,
+            fontSize: 21,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -288,23 +323,108 @@ class InsuranceDashboard extends StatelessWidget {
 
   Widget _categoryCard(IconData icon, String title, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE8EDF4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 30),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 25),
+          ),
           const SizedBox(height: 12),
           Text(
             title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: primaryColor,
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _policyCard(Policy policy, BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PolicyDetailsScreen(policy: policy),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(17),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE8EDF4)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF1F9),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: const Icon(
+                Icons.shield_outlined,
+                color: primaryColor,
+                size: 25,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    policy.policyName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '${policy.policyId} • ${policy.status}',
+                    style: const TextStyle(
+                      color: Colors.blueGrey,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 15,
+              color: Colors.blueGrey,
+            ),
+          ],
+        ),
       ),
     );
   }
