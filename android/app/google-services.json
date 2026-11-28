@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 {
+=======
+﻿{
+>>>>>>> origin/develop
   "project_info": {
     "project_number": "957931265414",
     "project_id": "insure-plus",
@@ -36,4 +40,8 @@
     }
   ],
   "configuration_version": "1"
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/develop

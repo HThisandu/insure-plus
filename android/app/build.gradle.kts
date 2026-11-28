@@ -1,5 +1,9 @@
 plugins {
     id("com.android.application")
+<<<<<<< HEAD
+=======
+    id("org.jetbrains.kotlin.android")
+>>>>>>> origin/develop
     // START: FlutterFire Configuration
     id("com.google.gms.google-services")
     // END: FlutterFire Configuration
