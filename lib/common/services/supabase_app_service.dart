@@ -2,16 +2,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Initializes Supabase and forwards the signed-in Firebase ID token.
-///
-/// Firebase remains the identity provider. Supabase uses that verified token
-/// for PostgreSQL Row Level Security and private Storage access.
+import '../../supabase_config.dart';
+
 class SupabaseAppService {
   SupabaseAppService._();
 
-  static const String _url = String.fromEnvironment('SUPABASE_URL');
-  static const String _publishableKey =
-      String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+  static const String _envUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String _envKey = String.fromEnvironment(
+    'SUPABASE_PUBLISHABLE_KEY',
+  );
+
+  static String get _url =>
+      _envUrl.isNotEmpty ? _envUrl : SupabaseConfig.supabaseUrl;
+
+  static String get _publishableKey =>
+      _envKey.isNotEmpty ? _envKey : SupabaseConfig.supabasePublishableKey;
 
   static bool _initialized = false;
 
@@ -24,10 +29,7 @@ class SupabaseAppService {
     if (_initialized) return;
 
     if (!isConfigured) {
-      debugPrint(
-        'Supabase is not configured. Add SUPABASE_URL and '
-        'SUPABASE_PUBLISHABLE_KEY using --dart-define-from-file.',
-      );
+      debugPrint('Supabase is not configured.');
       return;
     }
 
@@ -42,15 +44,11 @@ class SupabaseAppService {
     );
 
     _initialized = true;
-    debugPrint('Supabase initialized with Firebase Authentication tokens.');
   }
 
   static SupabaseClient get client {
     if (!_initialized) {
-      throw StateError(
-        'Supabase is not configured. Create supabase_config.json from '
-        'supabase_config.json.example and restart the app.',
-      );
+      throw StateError('Supabase is not initialized.');
     }
     return Supabase.instance.client;
   }

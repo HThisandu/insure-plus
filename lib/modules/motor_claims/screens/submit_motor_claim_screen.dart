@@ -485,8 +485,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty)
+                    if (val == null || val.trim().isEmpty) {
                       return 'Please enter claimant name';
+                    }
                     return null;
                   },
                 ),
@@ -500,8 +501,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     prefixIcon: Icon(Icons.phone_outlined),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty)
+                    if (val == null || val.trim().isEmpty) {
                       return 'Contact number required';
+                    }
                     return null;
                   },
                 ),
@@ -637,8 +639,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     prefixIcon: Icon(Icons.location_on_outlined),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty)
+                    if (val == null || val.trim().isEmpty) {
                       return 'Accident location required';
+                    }
                     return null;
                   },
                 ),
@@ -682,8 +685,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                             )
                             .toList(),
                         onChanged: (val) {
-                          if (val != null)
+                          if (val != null) {
                             setState(() => _damageSeverity = val);
+                          }
                         },
                       ),
                     ),
@@ -757,8 +761,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                           hintText: 'e.g. B1234567',
                         ),
                         validator: (val) {
-                          if (val == null || val.trim().isEmpty)
+                          if (val == null || val.trim().isEmpty) {
                             return 'License number required';
+                          }
                           return null;
                         },
                       ),
@@ -776,8 +781,9 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                             )
                             .toList(),
                         onChanged: (val) {
-                          if (val != null)
+                          if (val != null) {
                             setState(() => _relationshipToInsured = val);
+                          }
                         },
                       ),
                     ),
@@ -856,11 +862,13 @@ class _SubmitMotorClaimScreenState extends State<SubmitMotorClaimScreen> {
                     prefixIcon: Icon(Icons.monetization_on_outlined),
                   ),
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty)
+                    if (val == null || val.trim().isEmpty) {
                       return 'Please enter claim amount';
+                    }
                     final n = double.tryParse(val.trim());
-                    if (n == null || n <= 0)
+                    if (n == null || n <= 0) {
                       return 'Please enter a valid positive number';
+                    }
                     return null;
                   },
                 ),

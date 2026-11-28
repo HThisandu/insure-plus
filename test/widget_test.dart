@@ -1,19 +1,14 @@
-<<<<<<< HEAD
-import 'package:flutter_test/flutter_test.dart';
-import 'package:insure_plus/main.dart';
-
-void main() {
-  test('Insure Plus app can be created', () {
-    const app = InsurePlusApp();
-
-    expect(app, isA<InsurePlusApp>());
-=======
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:insure_plus/features/authentication/screens/login_screen.dart';
 import 'package:insure_plus/main.dart';
 
 void main() {
+  test('Insure Plus app can be created', () {
+    const app = InsurePlusApp();
+    expect(app, isA<InsurePlusApp>());
+  });
+
   testWidgets(
     'Login and password reset validate the form before using Firebase',
     (tester) async {
@@ -38,7 +33,7 @@ void main() {
     },
   );
 
-  testWidgets('Insure Plus home displays the Motor Claims dashboard', (
+  testWidgets('Insure Plus home displays dashboard actions', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -52,6 +47,5 @@ void main() {
     expect(find.text('View Claims'), findsOneWidget);
     expect(find.text('Make a Claim'), findsOneWidget);
     expect(find.text('Recent activity'), findsOneWidget);
->>>>>>> origin/develop
   });
 }
