@@ -135,3 +135,12 @@ backend/functions/node_modules/
 .env.*
 *.pem
 *.key
+
+# Local Firebase Emulator Suite
+/.firebase/
+/android/build/
+/emulator-data/
+/firebase-debug.log
+
+# Local Supabase configuration
+supabase_config.json
