@@ -57,11 +57,8 @@ class _ClaimManagementPreviewState extends State<ClaimManagementPreview> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Claim Management Preview',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF175E59)),
-      ),
       home: ClaimsDashboardScreen(service: _service),
     );
   }

@@ -1,30 +1,46 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:insure_plus/features/authentication/screens/login_screen.dart';
 import 'package:insure_plus/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets(
+    'Login and password reset validate the form before using Firebase',
+    (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      final reset = find.text('Forgot password?');
+      await tester.ensureVisible(reset);
+      await tester.tap(reset);
+      await tester.pump();
+      expect(find.text('Enter your email address'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+      final password = tester.state<FormFieldState<String>>(
+        find.byType(TextFormField).last,
+      );
+      expect(password.hasError, isFalse);
+
+      final login = find.text('Log in');
+      await tester.ensureVisible(login);
+      await tester.tap(login);
+      await tester.pump();
+      expect(password.errorText, 'Enter your password');
+    },
+  );
+
+  testWidgets('Insure Plus home displays the Motor Claims dashboard', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: MyHomePage(title: 'Insure Plus')),
+    );
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Insure Plus'), findsOneWidget);
+    expect(find.text("You're in safe hands."), findsOneWidget);
+    expect(find.text('What would you like to do?'), findsOneWidget);
+    expect(find.text('View Claims'), findsOneWidget);
+    expect(find.text('Make a Claim'), findsOneWidget);
+    expect(find.text('Recent activity'), findsOneWidget);
   });
 }

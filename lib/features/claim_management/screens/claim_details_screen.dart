@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/claim_scaffold.dart';
+
 import '../services/claim_service.dart';
 import '../widgets/status_badge.dart';
 import 'claim_review_screen.dart';
@@ -17,8 +19,8 @@ class ClaimDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dates = MaterialLocalizations.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Claim details')),
+    return ClaimScaffold(
+      title: 'Claim details',
       body: SafeArea(
         child: ListenableBuilder(
           listenable: service,

@@ -28,15 +28,28 @@ class ClaimService extends ChangeNotifier {
     ClaimStatus.approved || ClaimStatus.rejected => const [],
   };
 
-  bool updateStatus(String claimId, ClaimStatus expected, ClaimStatus next) {
+  Future<bool> updateStatus(
+    String claimId,
+    ClaimStatus expected,
+    ClaimStatus next,
+  ) async {
     final claim = findClaim(claimId);
     if (claim == null ||
         claim.status != expected ||
         !reviewOptions(expected).contains(next)) {
       return false;
     }
-    _claims[claimId] = claim.withStatus(next);
-    notifyListeners();
+    replaceClaim(claimId, claim.withStatus(next));
     return true;
+  }
+
+  @protected
+  void replaceClaim(String claimId, Claim? claim) {
+    if (claim == null) {
+      _claims.remove(claimId);
+    } else {
+      _claims[claimId] = claim;
+    }
+    notifyListeners();
   }
 }
